@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ruff-fix-and-commit = "ruff_fix_and_commit.cli:_entry"
+ruff-fix-and-commit = "ruff_fix_and_commit.cli:app"
 
 [dependency-groups]
 dev = [

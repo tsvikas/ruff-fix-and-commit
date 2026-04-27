@@ -281,9 +281,5 @@ def _build_message(
     return "\n".join(lines)
 
 
-def _entry() -> None:
-    app()
-
-
 if __name__ == "__main__":
     app()
