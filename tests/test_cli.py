@@ -388,6 +388,9 @@ def test_submodule_files_not_modified(tmp_path: Path) -> None:
 
     inner_path = outer / "sub" / "inner.py"
     inner_before = inner_path.read_text()
+    # Capture the submodule gitlink (a "160000 commit <sha> sub" entry) so
+    # we can assert `git add -u` did NOT move it after the fix.
+    sub_gitlink_before = outer_repo.git.ls_tree("HEAD", "sub")
 
     r = subprocess.run(
         [RFC, "B009"],
@@ -401,3 +404,6 @@ def test_submodule_files_not_modified(tmp_path: Path) -> None:
     diff = outer_repo.git.show("--stat", "HEAD")
     assert "outer.py" in diff
     assert "inner.py" not in diff
+    # `git add -u` must not touch the submodule gitlink.
+    sub_gitlink_after = outer_repo.git.ls_tree("HEAD", "sub")
+    assert sub_gitlink_before == sub_gitlink_after
