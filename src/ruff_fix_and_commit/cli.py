@@ -65,8 +65,9 @@ class Ruff:
         args.append("--fix" if fix else "--no-fix")
         if select is not None:
             args.extend(["--select", select])
-        if self.unsafe_fixes:
-            args.append("--unsafe-fixes")
+        # Be explicit either way so a repo's `unsafe-fixes = true` config
+        # cannot override our intent.
+        args.append("--unsafe-fixes" if self.unsafe_fixes else "--no-unsafe-fixes")
         args.extend(self.targets)
         result = self._run(args, allow_violations=True)
         return _parse_stats(result.stdout)
