@@ -240,6 +240,19 @@ def test_statistics_default_uses_repo_selection(repo: git.Repo) -> None:
     assert "B018" in r.stdout
 
 
+def test_statistics_ignore_drops_matching_rules(repo: git.Repo) -> None:
+    add_file(
+        repo,
+        "t.py",
+        'def f():\n    getattr(o, "a")\n    1\n',
+    )
+    # Without --ignore, B018 (useless-expression) would remain.
+    # With --ignore B018, the stats output should show "remaining: none".
+    r = run_rfc(repo, "B009", "--statistics", "B", "--ignore", "B018")
+    assert r.returncode == 0, r.stderr
+    assert "remaining: none" in r.stdout
+
+
 def test_invalid_statistics_selector_runs_no_fix(repo: git.Repo) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
     initial = repo.head.commit.hexsha

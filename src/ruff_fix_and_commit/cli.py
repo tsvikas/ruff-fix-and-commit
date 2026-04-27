@@ -54,17 +54,27 @@ class Ruff:
         self.targets = targets
         self.unsafe_fixes = unsafe_fixes
 
-    def check(self, select: str | None, *, fix: bool = False) -> dict[str, RuleStat]:
+    def check(
+        self,
+        select: str | None,
+        *,
+        fix: bool = False,
+        ignore: str | None = None,
+    ) -> dict[str, RuleStat]:
         """Run ``ruff check --statistics`` and return per-rule stats.
 
         ``select=None`` omits ``--select`` so ruff uses the repo's configured
         rule selection. With ``fix=True``, applies fixes in the same call;
         the returned stats are the post-fix remaining violations.
+        ``ignore`` forwards to ruff as ``--ignore`` to drop matching rules
+        from the result.
         """
         args = ["check", "--statistics", "--output-format", "json"]
         args.append("--fix" if fix else "--no-fix")
         if select is not None:
             args.extend(["--select", select])
+        if ignore is not None:
+            args.extend(["--ignore", ignore])
         # Be explicit either way so a repo's `unsafe-fixes = true` config
         # cannot override our intent.
         args.append("--unsafe-fixes" if self.unsafe_fixes else "--no-unsafe-fixes")
@@ -121,6 +131,7 @@ def main(
     *,
     unsafe_fixes: bool = False,
     statistics: str | None = None,
+    ignore: str | None = None,
 ) -> int:
     """Run `ruff check --fix` for RULES and commit the changes.
 
@@ -136,6 +147,9 @@ def main(
         and print a per-rule count of what's still left. Pass `DEFAULT`
         to omit `--select` and use the repo's configured rule selection.
         Validated up front so a typo here doesn't waste a fix run.
+    ignore:
+        Forwarded to ruff as `--ignore` for the post-fix `--statistics`
+        run only. Example: `D,ANN`.
     """
     try:
         repo = git.Repo(".", search_parent_directories=True)
@@ -160,10 +174,10 @@ def main(
     try:
         if statistics is not None:
             # Validate up front (cheap call); raises RuffError if selector is bad.
-            ruff.check(_resolve_select(statistics))
+            ruff.check(_resolve_select(statistics), ignore=ignore)
         rc = _do_fix_and_commit(repo, ruff, rules)
         if statistics is not None:
-            _print_statistics(ruff, _resolve_select(statistics))
+            _print_statistics(ruff, _resolve_select(statistics), ignore=ignore)
         return rc
     except RuffError as e:
         msg = str(e)
@@ -256,8 +270,10 @@ def _print_remaining(ruff: Ruff, rules: str) -> None:
         print(f"{remaining} violations remain.")
 
 
-def _print_statistics(ruff: Ruff, select: str | None) -> None:
-    stats = ruff.check(select)
+def _print_statistics(
+    ruff: Ruff, select: str | None, *, ignore: str | None = None
+) -> None:
+    stats = ruff.check(select, ignore=ignore)
     print()
     if not stats:
         print("remaining: none")
