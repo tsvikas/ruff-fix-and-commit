@@ -9,7 +9,7 @@ from pathlib import Path
 import git
 import pytest
 
-RFC = str(Path(sys.executable).parent / "ruff-fix-and-commit")
+RFC = Path(sys.executable).parent / "ruff-fix-and-commit"
 
 
 def _make_repo(path: Path) -> git.Repo:
@@ -372,16 +372,16 @@ def test_submodule_files_not_modified(tmp_path: Path) -> None:
             "protocol.file.allow=always",
             "submodule",
             "add",
-            str(inner),
+            inner,
             "sub",
         ],
-        cwd=str(outer),
+        cwd=outer,
         check=True,
         capture_output=True,
     )
     subprocess.run(
         ["git", "commit", "-m", "add submodule"],
-        cwd=str(outer),
+        cwd=outer,
         check=True,
         capture_output=True,
     )
@@ -394,7 +394,7 @@ def test_submodule_files_not_modified(tmp_path: Path) -> None:
 
     r = subprocess.run(
         [RFC, "B009"],
-        cwd=str(outer),
+        cwd=outer,
         capture_output=True,
         text=True,
         check=False,
