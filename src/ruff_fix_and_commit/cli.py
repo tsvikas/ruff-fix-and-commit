@@ -47,6 +47,48 @@ class RuleStat:
         )
 
 
+@dataclass(frozen=True)
+class Selector:
+    """Ruff rule selector for one invocation.
+
+    `select` becomes `--select`; `extend_select` becomes `--extend-select`.
+    Either may be `None`. With both `None`, ruff falls back to the repo's
+    configured selection.
+    """
+
+    select: str | None = None
+    extend_select: str | None = None
+
+    @classmethod
+    def parse(cls, raw: str) -> Selector:
+        """Parse a user-facing selector string with `DEFAULT` semantics.
+
+        `DEFAULT` (case-insensitive) anywhere in a comma list means
+        "use the repo's configured selection". When mixed with other
+        rules, those rules become `--extend-select` so they're added
+        on top of the repo's defaults.
+
+            "B009"          -> Selector(select="B009")
+            "DEFAULT"       -> Selector()                  # repo config
+            "DEFAULT,E"     -> Selector(extend_select="E") # repo + E
+            "A,DEFAULT,B"   -> Selector(extend_select="A,B")
+        """
+        parts = raw.split(",")
+        has_default = any(p.upper() == _DEFAULT_SENTINEL for p in parts)
+        rest = ",".join(p for p in parts if p.upper() != _DEFAULT_SENTINEL)
+        if has_default:
+            return cls(extend_select=rest or None)
+        return cls(select=rest or None)
+
+
+def _to_selector(s: Selector | str | None) -> Selector:
+    if s is None:
+        return Selector()
+    if isinstance(s, Selector):
+        return s
+    return Selector(select=s)
+
+
 class Ruff:
     """Adapter for invoking the ruff CLI against a fixed set of targets."""
 
@@ -55,21 +97,30 @@ class Ruff:
 
     def stats(
         self,
-        select: str | None = None,
+        selector: Selector | str | None = None,
         *,
         unsafe_fixes: bool = False,
         ignore: str | None = None,
     ) -> dict[str, RuleStat]:
         """Read-only: query per-rule violation counts.
 
-        ``select=None`` omits ``--select`` so ruff uses the repo's configured
-        rule selection. ``ignore`` forwards as ``--ignore``.
+        ``selector=None`` omits selectors so ruff uses the repo's
+        configured rule selection. ``ignore`` forwards as ``--ignore``.
         """
-        return self._invoke(select, fix=False, unsafe_fixes=unsafe_fixes, ignore=ignore)
+        return self._invoke(
+            _to_selector(selector),
+            fix=False,
+            unsafe_fixes=unsafe_fixes,
+            ignore=ignore,
+        )
 
-    def fix(self, select: str, *, unsafe_fixes: bool = False) -> dict[str, RuleStat]:
-        """Apply fixes for ``select`` and return post-fix remaining stats."""
-        return self._invoke(select, fix=True, unsafe_fixes=unsafe_fixes, ignore=None)
+    def fix(
+        self, selector: Selector | str, *, unsafe_fixes: bool = False
+    ) -> dict[str, RuleStat]:
+        """Apply fixes for ``selector`` and return post-fix remaining stats."""
+        return self._invoke(
+            _to_selector(selector), fix=True, unsafe_fixes=unsafe_fixes, ignore=None
+        )
 
     def format_check(self) -> bool:
         result = self._run(["format", "--check", *self.targets], allow_violations=True)
@@ -80,7 +131,7 @@ class Ruff:
 
     def _invoke(
         self,
-        select: str | None,
+        selector: Selector,
         *,
         fix: bool,
         unsafe_fixes: bool,
@@ -88,8 +139,10 @@ class Ruff:
     ) -> dict[str, RuleStat]:
         args = ["check", "--statistics", "--output-format", "json"]
         args.append("--fix" if fix else "--no-fix")
-        if select is not None:
-            args.extend(["--select", select])
+        if selector.select is not None:
+            args.extend(["--select", selector.select])
+        if selector.extend_select is not None:
+            args.extend(["--extend-select", selector.extend_select])
         if ignore is not None:
             args.extend(["--ignore", ignore])
         # Be explicit either way so a repo's `unsafe-fixes = true` config
@@ -128,11 +181,6 @@ def _parse_stats(stdout: str) -> dict[str, RuleStat]:
     except json.JSONDecodeError:
         return {}
     return {entry["code"]: RuleStat.from_json(entry) for entry in payload}
-
-
-def _resolve_select(select: str) -> str | None:
-    """Translate the ``DEFAULT`` sentinel to ``None`` (use repo config)."""
-    return None if select.upper() == _DEFAULT_SENTINEL else select
 
 
 @app.default
@@ -186,31 +234,22 @@ def main(
 
     ruff = Ruff(targets)
 
+    stats_selector = Selector.parse(statistics) if statistics is not None else None
     try:
-        if statistics is not None:
+        if stats_selector is not None:
             # Validate up front (cheap call); raises RuffError if selector is bad.
-            ruff.stats(
-                _resolve_select(statistics),
-                unsafe_fixes=unsafe_fixes,
-                ignore=ignore,
-            )
+            ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
         if rules is None:
             _print_status(ruff)
-            if statistics is not None:
+            if stats_selector is not None:
                 _print_statistics(
-                    ruff,
-                    _resolve_select(statistics),
-                    unsafe_fixes=unsafe_fixes,
-                    ignore=ignore,
+                    ruff, stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore
                 )
             return 0
         rc = _do_fix_and_commit(repo, ruff, rules, unsafe_fixes=unsafe_fixes)
-        if statistics is not None:
+        if stats_selector is not None:
             _print_statistics(
-                ruff,
-                _resolve_select(statistics),
-                unsafe_fixes=unsafe_fixes,
-                ignore=ignore,
+                ruff, stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore
             )
         return rc
     except RuffError as e:
@@ -330,12 +369,12 @@ def _print_remaining(after: dict[str, RuleStat]) -> None:
 
 def _print_statistics(
     ruff: Ruff,
-    select: str | None,
+    selector: Selector | str | None,
     *,
     unsafe_fixes: bool = False,
     ignore: str | None = None,
 ) -> None:
-    stats = ruff.stats(select, unsafe_fixes=unsafe_fixes, ignore=ignore)
+    stats = ruff.stats(selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
     print()
     if not stats:
         print("remaining: none")
