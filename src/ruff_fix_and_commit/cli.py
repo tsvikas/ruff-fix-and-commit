@@ -211,6 +211,7 @@ def _do_fix_and_commit(repo: git.Repo, ruff: Ruff, rules: str) -> int:
     message = _build_message(rules, fixed, names)
     repo.index.commit(message)
     print(message)
+    _print_remaining(ruff, rules)
     return 0
 
 
@@ -241,6 +242,17 @@ def _report_nothing_fixed(ruff: Ruff, select: str, after: dict[str, RuleStat]) -
     if hidden > 0:
         plural = "es" if hidden != 1 else ""
         print(f"hint: {hidden} hidden fix{plural} can be enabled with --unsafe-fixes")
+
+
+def _print_remaining(ruff: Ruff, rules: str) -> None:
+    """Re-query post-fix state and report any violations of `rules` that remain."""
+    remaining = sum(s.count for s in ruff.check(rules).values())
+    if remaining == 0:
+        return
+    if remaining == 1:
+        print("1 violation remains.")
+    else:
+        print(f"{remaining} violations remain.")
 
 
 def _print_statistics(ruff: Ruff, select: str | None) -> None:

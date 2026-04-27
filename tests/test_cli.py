@@ -163,6 +163,27 @@ def test_no_fixable_violations(repo: git.Repo) -> None:
     assert repo.head.commit.hexsha == initial
 
 
+def test_partial_fix_reports_remaining(repo: git.Repo) -> None:
+    add_file(
+        repo,
+        "t.py",
+        'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n\n'
+        "g = lambda x: x + 1\nh = lambda y: y + 2\n",
+    )
+    r = run_rfc(repo, "B009,E731")
+    assert r.returncode == 0, r.stderr
+    # B009 was fixable (safe); E731 is unsafe-only and stays.
+    assert "ruff-fix: B009 (get-attr-with-constant) x2" in r.stdout
+    assert "2 violations remain" in r.stdout
+
+
+def test_full_fix_no_remaining_footer(repo: git.Repo) -> None:
+    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
+    r = run_rfc(repo, "B009")
+    assert r.returncode == 0, r.stderr
+    assert "remain" not in r.stdout
+
+
 def test_unsafe_only_violations_hint_at_unsafe_fixes(repo: git.Repo) -> None:
     add_file(repo, "t.py", "f = lambda x: x + 1\ng = lambda y: y * 2\n")
     initial = repo.head.commit.hexsha
