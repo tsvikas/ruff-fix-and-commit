@@ -55,8 +55,7 @@ def test_single_rule(repo: git.Repo) -> None:
     r = run_rfc(repo, "B009")
     assert r.returncode == 0, r.stderr
     assert (
-        repo.head.commit.message.strip()
-        == "ruff-fix: B009 (get-attr-with-constant) x2"
+        repo.head.commit.message.strip() == "ruff-fix: B009 (get-attr-with-constant) x2"
     )
 
 
@@ -87,7 +86,7 @@ def test_unsafe_fixes_gating(repo: git.Repo) -> None:
     initial = repo.head.commit.hexsha
     r = run_rfc(repo, "C408")
     assert r.returncode == 0, r.stderr
-    assert repo.head.commit.hexsha == initial, "no commit when only unsafe fixes available"
+    assert repo.head.commit.hexsha == initial
     r = run_rfc(repo, "C408", "--unsafe-fixes")
     assert r.returncode == 0, r.stderr
     assert repo.head.commit.hexsha != initial
@@ -101,7 +100,7 @@ def test_unformatted_pre_state_preserved(repo: git.Repo) -> None:
     p = add_file(repo, "t.py", 'def f( ):\n    getattr( o , "a" )\n')
     r = run_rfc(repo, "B009")
     assert r.returncode == 0, r.stderr
-    assert "def f( ):" in p.read_text(), "format step should be skipped if pre-state was unformatted"
+    assert "def f( ):" in p.read_text()
 
 
 def test_preexisting_i001_left_alone_when_not_selected(repo: git.Repo) -> None:
@@ -117,25 +116,18 @@ def test_preexisting_i001_left_alone_when_not_selected(repo: git.Repo) -> None:
     )
     r = run_rfc(repo, "B009")
     assert r.returncode == 0, r.stderr
-    assert p.read_text().startswith("import sys\nimport os\n"), "I001 should not have been silently fixed"
+    assert p.read_text().startswith("import sys\nimport os\n")
 
 
 def test_preexisting_i001_fixed_and_credited_when_selected(repo: git.Repo) -> None:
     p = add_file(
         repo,
         "t.py",
-        "import sys\n"
-        "import os\n"
-        "\n"
-        "def f():\n"
-        "    return sys.path, os.getcwd()\n",
+        "import sys\nimport os\n\ndef f():\n    return sys.path, os.getcwd()\n",
     )
     r = run_rfc(repo, "I001")
     assert r.returncode == 0, r.stderr
-    assert (
-        repo.head.commit.message.strip()
-        == "ruff-fix: I001 (unsorted-imports) x1"
-    )
+    assert repo.head.commit.message.strip() == "ruff-fix: I001 (unsorted-imports) x1"
     assert p.read_text().startswith("import os\nimport sys\n")
 
 
@@ -156,7 +148,7 @@ def test_untracked_file_isolation(repo: git.Repo) -> None:
     extra_before = extra.read_text()
     r = run_rfc(repo, "B009")
     assert r.returncode == 0, r.stderr
-    assert extra.read_text() == extra_before, "untracked file should not be modified"
+    assert extra.read_text() == extra_before
     diff = repo.git.show("--stat", "HEAD")
     assert "t.py" in diff
     assert "extra.py" not in diff
@@ -188,8 +180,13 @@ def test_submodule_files_not_modified(tmp_path: Path) -> None:
 
     subprocess.run(
         [
-            "git", "-c", "protocol.file.allow=always",
-            "submodule", "add", str(inner), "sub",
+            "git",
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            str(inner),
+            "sub",
         ],
         cwd=str(outer),
         check=True,
@@ -213,7 +210,7 @@ def test_submodule_files_not_modified(tmp_path: Path) -> None:
         check=False,
     )
     assert r.returncode == 0, r.stderr
-    assert inner_path.read_text() == inner_before, "submodule file should be untouched"
+    assert inner_path.read_text() == inner_before
     diff = outer_repo.git.show("--stat", "HEAD")
     assert "outer.py" in diff
     assert "inner.py" not in diff
