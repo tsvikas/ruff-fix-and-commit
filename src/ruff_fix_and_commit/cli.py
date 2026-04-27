@@ -121,9 +121,12 @@ def _format_check_clean(targets: list[str]) -> bool:
 def _violations(select: str, targets: list[str]) -> list[dict]:
     result = subprocess.run(
         [
-            "ruff", "check",
-            "--select", select,
-            "--output-format", "json",
+            "ruff",
+            "check",
+            "--select",
+            select,
+            "--output-format",
+            "json",
             "--no-fix",
             *targets,
         ],
