@@ -22,6 +22,8 @@ ruff-fix-and-commit [RULES] [--unsafe-fixes] [--statistics SELECTOR] [--ignore S
 
 `RULES` is a comma-separated ruff rule selector (codes or category prefixes), passed verbatim to `ruff --select`. If omitted, the tool runs in **status mode** (see below) instead of fixing.
 
+The `--statistics` value accepts the same syntax plus a `DEFAULT` token: bare `DEFAULT` means "use the repo's configured selection", and `DEFAULT,X` means "the repo's configuration plus X" (translated to `--extend-select X`).
+
 ### Examples
 
 ```bash
@@ -33,6 +35,9 @@ ruff-fix-and-commit E731 --unsafe-fixes
 
 # after fixing B009, show stats for everything in the repo's lint config
 ruff-fix-and-commit B009 --statistics DEFAULT
+
+# repo's lint config plus extra rules (DEFAULT,X mixes --extend-select)
+ruff-fix-and-commit B009 --statistics DEFAULT,E
 
 # after fixing B009, show stats for any selector, suppressing noisy families
 ruff-fix-and-commit B009 --statistics ALL --ignore D,ANN
