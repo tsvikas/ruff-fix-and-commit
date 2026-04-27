@@ -6,6 +6,8 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
+from typing import Any
 
 import cyclopts
 import git
@@ -16,30 +18,100 @@ _RUFF_ENV = {k: v for k, v in os.environ.items() if k != "RUFF_OUTPUT_FORMAT"}
 
 _DEFAULT_SENTINEL = "DEFAULT"
 
+# Rules whose violations a ruff fix can introduce as a side effect of fixing
+# something else. We post-fix-clean these so a ruff-fix-and-commit run never
+# leaves the tree dirtier than it found it.
+RUFF_INDUCED_RULES: tuple[str, ...] = ("I001", "F401")
+
 
 class RuffError(Exception):
     """ruff exited with an unexpected status (config/usage error, not violations)."""
 
 
-def _run_ruff(
-    args: list[str], *, allow_violations: bool = False
-) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        ["ruff", *args],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_RUFF_ENV,
-    )
-    allowed = {0, 1} if allow_violations else {0}
-    if result.returncode not in allowed:
-        msg = (
-            result.stderr.strip()
-            or result.stdout.strip()
-            or f"ruff exited with code {result.returncode}"
+@dataclass(frozen=True)
+class RuleStat:
+    code: str
+    name: str
+    count: int
+    fixable: bool
+    fixable_count: int
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> RuleStat:
+        return cls(
+            code=payload["code"],
+            name=payload["name"],
+            count=payload["count"],
+            fixable=payload["fixable"],
+            fixable_count=payload["fixable_count"],
         )
-        raise RuffError(msg)
-    return result
+
+
+class Ruff:
+    """Adapter for invoking the ruff CLI against a fixed set of targets."""
+
+    def __init__(self, targets: list[str], *, unsafe_fixes: bool = False) -> None:
+        self.targets = targets
+        self.unsafe_fixes = unsafe_fixes
+
+    def check(self, select: str | None, *, fix: bool = False) -> dict[str, RuleStat]:
+        """Run ``ruff check --statistics`` and return per-rule stats.
+
+        ``select=None`` omits ``--select`` so ruff uses the repo's configured
+        rule selection. With ``fix=True``, applies fixes in the same call;
+        the returned stats are the post-fix remaining violations.
+        """
+        args = ["check", "--statistics", "--output-format", "json"]
+        args.append("--fix" if fix else "--no-fix")
+        if select is not None:
+            args.extend(["--select", select])
+        if self.unsafe_fixes:
+            args.append("--unsafe-fixes")
+        args.extend(self.targets)
+        result = self._run(args, allow_violations=True)
+        return _parse_stats(result.stdout)
+
+    def format_check(self) -> bool:
+        result = self._run(["format", "--check", *self.targets], allow_violations=True)
+        return result.returncode == 0
+
+    def format(self) -> None:
+        self._run(["format", *self.targets])
+
+    def _run(
+        self, args: list[str], *, allow_violations: bool = False
+    ) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            ["ruff", *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_RUFF_ENV,
+        )
+        allowed = {0, 1} if allow_violations else {0}
+        if result.returncode not in allowed:
+            msg = (
+                result.stderr.strip()
+                or result.stdout.strip()
+                or f"ruff exited with code {result.returncode}"
+            )
+            raise RuffError(msg)
+        return result
+
+
+def _parse_stats(stdout: str) -> dict[str, RuleStat]:
+    if not stdout.strip():
+        return {}
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError:
+        return {}
+    return {entry["code"]: RuleStat.from_json(entry) for entry in payload}
+
+
+def _resolve_select(select: str) -> str | None:
+    """Translate the ``DEFAULT`` sentinel to ``None`` (use repo config)."""
+    return None if select.upper() == _DEFAULT_SENTINEL else select
 
 
 @app.default
@@ -82,13 +154,15 @@ def main(
         print("Nothing to fix.")
         return 0
 
+    ruff = Ruff(targets, unsafe_fixes=unsafe_fixes)
+
     try:
         if statistics is not None:
             # Validate up front (cheap call); raises RuffError if selector is bad.
-            _stats(statistics, targets, unsafe_fixes=unsafe_fixes)
-        rc = _do_fix_and_commit(repo, rules, targets, unsafe_fixes=unsafe_fixes)
+            ruff.check(_resolve_select(statistics))
+        rc = _do_fix_and_commit(repo, ruff, rules)
         if statistics is not None:
-            _print_statistics(statistics, targets, unsafe_fixes=unsafe_fixes)
+            _print_statistics(ruff, _resolve_select(statistics))
         return rc
     except RuffError as e:
         msg = str(e)
@@ -97,59 +171,43 @@ def main(
         return 2
 
 
-def _do_fix_and_commit(
-    repo: git.Repo, rules: str, targets: list[str], *, unsafe_fixes: bool
-) -> int:
-    was_formatted = _format_check_clean(targets)
-    had_i001_pre = bool(_stats("I001", targets))
-    had_f401_pre = bool(_stats("F401", targets))
+def _do_fix_and_commit(repo: git.Repo, ruff: Ruff, rules: str) -> int:
+    was_formatted = ruff.format_check()
+    before = ruff.check(rules)
+    before_induced = ruff.check(",".join(RUFF_INDUCED_RULES))
 
-    before = _stats(rules, targets)
-
-    # Apply the fix and capture after-stats in the same call.
-    fix_args = [
-        "check",
-        "--select",
-        rules,
-        "--fix",
-        "--statistics",
-        "--output-format",
-        "json",
-    ]
-    if unsafe_fixes:
-        fix_args.append("--unsafe-fixes")
-    fix_args.extend(targets)
-    result = _run_ruff(fix_args, allow_violations=True)
-    after = _parse_stats(result.stdout)
+    after = ruff.check(rules, fix=True)
     fixed: dict[str, int] = {}
     for code, entry in before.items():
-        delta = entry["count"] - after.get(code, {"count": 0})["count"]
+        after_entry = after.get(code)
+        delta = entry.count - (after_entry.count if after_entry else 0)
         if delta > 0:
             fixed[code] = delta
 
     if not fixed:
-        _report_nothing_fixed(rules, targets, after, unsafe_fixes=unsafe_fixes)
+        _report_nothing_fixed(ruff, rules, after)
         return 0
 
-    silent_codes: list[str] = []
-    if not had_i001_pre:
-        silent_codes.append("I001")
-    if not had_f401_pre:
-        silent_codes.append("F401")
+    # Clean up induced rules either if they were absent before the fix
+    # (so the fix could have introduced them) or if they were in the user's
+    # selection (so the user opted into fixing them, and the main fix may
+    # have left newly-introduced violations behind).
+    silent_codes = [
+        code
+        for code in RUFF_INDUCED_RULES
+        if code not in before_induced or code in before
+    ]
     if silent_codes:
-        _run_ruff(
-            ["check", "--select", ",".join(silent_codes), "--fix", *targets],
-            allow_violations=True,
-        )
+        ruff.check(",".join(silent_codes), fix=True)
 
     if was_formatted:
-        _run_ruff(["format", *targets])
+        ruff.format()
 
     repo.git.add(update=True)
     if not repo.is_dirty(working_tree=False, untracked_files=False, index=True):
         print("warning: nothing was staged after running ruff; skipping commit")
         return 0
-    names = {code: entry["name"] for code, entry in before.items()}
+    names = {code: entry.name for code, entry in before.items()}
     message = _build_message(rules, fixed, names)
     repo.index.commit(message)
     print(message)
@@ -168,68 +226,34 @@ def _tracked_python_files(repo: git.Repo) -> list[str]:
     ]
 
 
-def _format_check_clean(targets: list[str]) -> bool:
-    result = _run_ruff(["format", "--check", *targets], allow_violations=True)
-    return result.returncode == 0
-
-
-def _stats(
-    select: str, targets: list[str], *, unsafe_fixes: bool = False
-) -> dict[str, dict]:
-    """Per-rule stats: ``{code: {code, name, count, fixable, fixable_count}}``.
-
-    A `select` of ``"DEFAULT"`` (case-insensitive) omits ``--select`` so
-    ruff uses the repo's configured rule selection.
-    """
-    args = ["check", "--statistics", "--no-fix", "--output-format", "json"]
-    if select.upper() != _DEFAULT_SENTINEL:
-        args.extend(["--select", select])
-    if unsafe_fixes:
-        args.append("--unsafe-fixes")
-    args.extend(targets)
-    result = _run_ruff(args, allow_violations=True)
-    return _parse_stats(result.stdout)
-
-
-def _parse_stats(stdout: str) -> dict[str, dict]:
-    if not stdout.strip():
-        return {}
-    try:
-        return {entry["code"]: entry for entry in json.loads(stdout)}
-    except json.JSONDecodeError:
-        return {}
-
-
-def _report_nothing_fixed(
-    select: str, targets: list[str], after: dict[str, dict], *, unsafe_fixes: bool
-) -> None:
+def _report_nothing_fixed(ruff: Ruff, select: str, after: dict[str, RuleStat]) -> None:
     if not after:
         print("Nothing to fix.")
         return
     print("no fixes applied:")
-    for entry in sorted(after.values(), key=lambda e: (-e["count"], e["code"])):
-        marker = "[*]" if entry["fixable"] else "[ ]"
-        print(f"{entry['count']}\t{entry['code']}\t{marker} {entry['name']}")
-    if unsafe_fixes:
+    for entry in sorted(after.values(), key=lambda e: (-e.count, e.code)):
+        marker = "[*]" if entry.fixable else "[ ]"
+        print(f"{entry.count}\t{entry.code}\t{marker} {entry.name}")
+    if ruff.unsafe_fixes:
         return
-    unsafe_after = _stats(select, targets, unsafe_fixes=True)
-    hidden = sum(e["fixable_count"] for e in unsafe_after.values())
+    unsafe_after = Ruff(ruff.targets, unsafe_fixes=True).check(select)
+    hidden = sum(e.fixable_count for e in unsafe_after.values())
     if hidden > 0:
         plural = "es" if hidden != 1 else ""
         print(f"hint: {hidden} hidden fix{plural} can be enabled with --unsafe-fixes")
 
 
-def _print_statistics(select: str, targets: list[str], *, unsafe_fixes: bool) -> None:
-    stats = _stats(select, targets, unsafe_fixes=unsafe_fixes)
+def _print_statistics(ruff: Ruff, select: str | None) -> None:
+    stats = ruff.check(select)
     print()
     if not stats:
         print("remaining: none")
         return
     print("remaining:")
-    sorted_entries = sorted(stats.values(), key=lambda s: (-s["count"], s["code"]))
+    sorted_entries = sorted(stats.values(), key=lambda s: (-s.count, s.code))
     for s in sorted_entries:
-        marker = "[*]" if s["fixable"] else "[ ]"
-        print(f"{s['count']}\t{s['code']}\t{marker} {s['name']}")
+        marker = "[*]" if s.fixable else "[ ]"
+        print(f"{s.count}\t{s.code}\t{marker} {s.name}")
 
 
 def _build_message(
