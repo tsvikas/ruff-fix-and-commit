@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import functools
 import json
 import os
 import subprocess
 import sys
-from collections import Counter
 
 import cyclopts
 import git
@@ -84,13 +82,11 @@ def main(
 
     try:
         if statistics is not None:
-            _run_ruff(
-                ["check", "--select", statistics, "--no-fix", *targets],
-                allow_violations=True,
-            )
+            # Validate up front (cheap call); raises RuffError if selector is bad.
+            _stats(statistics, targets, unsafe_fixes=unsafe_fixes)
         rc = _do_fix_and_commit(repo, rules, targets, unsafe_fixes=unsafe_fixes)
         if statistics is not None:
-            _print_statistics(statistics, targets)
+            _print_statistics(statistics, targets, unsafe_fixes=unsafe_fixes)
         return rc
     except RuffError as e:
         msg = str(e)
@@ -103,21 +99,29 @@ def _do_fix_and_commit(
     repo: git.Repo, rules: str, targets: list[str], *, unsafe_fixes: bool
 ) -> int:
     was_formatted = _format_check_clean(targets)
-    had_i001_pre = bool(_violations("I001", targets))
-    had_f401_pre = bool(_violations("F401", targets))
+    had_i001_pre = bool(_stats("I001", targets))
+    had_f401_pre = bool(_stats("F401", targets))
 
-    before_counts = Counter(v["code"] for v in _violations(rules, targets))
+    before = _stats(rules, targets)
 
-    fix_args = ["check", "--select", rules, "--fix"]
+    # Apply the fix and capture after-stats in the same call.
+    fix_args = [
+        "check",
+        "--select",
+        rules,
+        "--fix",
+        "--statistics",
+        "--output-format",
+        "json",
+    ]
     if unsafe_fixes:
         fix_args.append("--unsafe-fixes")
     fix_args.extend(targets)
-    _run_ruff(fix_args, allow_violations=True)
-
-    after_counts = Counter(v["code"] for v in _violations(rules, targets))
+    result = _run_ruff(fix_args, allow_violations=True)
+    after = _parse_stats(result.stdout)
     fixed: dict[str, int] = {}
-    for code, before in before_counts.items():
-        delta = before - after_counts.get(code, 0)
+    for code, entry in before.items():
+        delta = entry["count"] - after.get(code, {"count": 0})["count"]
         if delta > 0:
             fixed[code] = delta
 
@@ -143,7 +147,8 @@ def _do_fix_and_commit(
     if not repo.is_dirty(working_tree=False, untracked_files=False, index=True):
         print("warning: nothing was staged after running ruff; skipping commit")
         return 0
-    message = _build_message(rules, fixed)
+    names = {code: entry["name"] for code, entry in before.items()}
+    message = _build_message(rules, fixed, names)
     repo.index.commit(message)
     print(message)
     return 0
@@ -166,61 +171,57 @@ def _format_check_clean(targets: list[str]) -> bool:
     return result.returncode == 0
 
 
-def _violations(select: str, targets: list[str]) -> list[dict]:
-    result = _run_ruff(
-        [
-            "check",
-            "--select",
-            select,
-            "--output-format",
-            "json",
-            "--no-fix",
-            *targets,
-        ],
-        allow_violations=True,
-    )
-    if not result.stdout.strip():
-        return []
+def _stats(
+    select: str, targets: list[str], *, unsafe_fixes: bool = False
+) -> dict[str, dict]:
+    """Per-rule stats: ``{code: {code, name, count, fixable, fixable_count}}``."""
+    args = [
+        "check",
+        "--select",
+        select,
+        "--statistics",
+        "--no-fix",
+        "--output-format",
+        "json",
+    ]
+    if unsafe_fixes:
+        args.append("--unsafe-fixes")
+    args.extend(targets)
+    result = _run_ruff(args, allow_violations=True)
+    return _parse_stats(result.stdout)
+
+
+def _parse_stats(stdout: str) -> dict[str, dict]:
+    if not stdout.strip():
+        return {}
     try:
-        return json.loads(result.stdout)
+        return {entry["code"]: entry for entry in json.loads(stdout)}
     except json.JSONDecodeError:
-        return []
+        return {}
 
 
-@functools.cache
-def _rule_name(code: str) -> str:
-    try:
-        result = _run_ruff(["rule", code, "--output-format", "json"])
-    except RuffError:
-        return ""
-    try:
-        return json.loads(result.stdout).get("name", "")
-    except json.JSONDecodeError:
-        return ""
-
-
-def _print_statistics(select: str, targets: list[str]) -> None:
-    result = _run_ruff(
-        ["check", "--select", select, "--statistics", "--no-fix", *targets],
-        allow_violations=True,
-    )
-    data_lines = [ln for ln in result.stdout.splitlines() if ln and ln[0].isdigit()]
+def _print_statistics(select: str, targets: list[str], *, unsafe_fixes: bool) -> None:
+    stats = _stats(select, targets, unsafe_fixes=unsafe_fixes)
     print()
-    if not data_lines:
+    if not stats:
         print("remaining: none")
         return
     print("remaining:")
-    for line in data_lines:
-        print(line)
+    sorted_entries = sorted(stats.values(), key=lambda s: (-s["count"], s["code"]))
+    for s in sorted_entries:
+        marker = "[*]" if s["fixable"] else "[ ]"
+        print(f"{s['count']}\t{s['code']}\t{marker} {s['name']}")
 
 
-def _build_message(rules_input: str, fixed: dict[str, int]) -> str:
+def _build_message(
+    rules_input: str, fixed: dict[str, int], names: dict[str, str]
+) -> str:
     items = sorted(fixed.items(), key=lambda kv: (-kv[1], kv[0]))
     if len(items) == 1:
         code, count = items[0]
-        return f"ruff-fix: {code} ({_rule_name(code)}) x{count}"
+        return f"ruff-fix: {code} ({names.get(code, '')}) x{count}"
     lines = [f"ruff-fix: {rules_input}", ""]
-    lines.extend(f"- {code} ({_rule_name(code)}) x{count}" for code, count in items)
+    lines.extend(f"- {code} ({names.get(code, '')}) x{count}" for code, count in items)
     return "\n".join(lines)
 
 
