@@ -43,7 +43,12 @@ def _run_ruff(
 
 
 @app.default
-def main(rules: str, *, unsafe_fixes: bool = False) -> int:
+def main(
+    rules: str,
+    *,
+    unsafe_fixes: bool = False,
+    statistics: str | None = None,
+) -> int:
     """Run `ruff check --fix` for RULES and commit the changes.
 
     Parameters
@@ -53,6 +58,11 @@ def main(rules: str, *, unsafe_fixes: bool = False) -> int:
         passed verbatim to `ruff --select`. Example: `A,B001,C212`.
     unsafe_fixes:
         Forwarded to ruff as `--unsafe-fixes`.
+    statistics:
+        After the fix, run `ruff check --select STATISTICS --statistics`
+        and print a per-rule count of what's still left. Useful to see
+        what couldn't be auto-fixed. Validated up front so a typo here
+        doesn't waste a fix run.
     """
     try:
         repo = git.Repo(".", search_parent_directories=True)
@@ -73,7 +83,15 @@ def main(rules: str, *, unsafe_fixes: bool = False) -> int:
         return 0
 
     try:
-        return _do_fix_and_commit(repo, rules, targets, unsafe_fixes=unsafe_fixes)
+        if statistics is not None:
+            _run_ruff(
+                ["check", "--select", statistics, "--no-fix", *targets],
+                allow_violations=True,
+            )
+        rc = _do_fix_and_commit(repo, rules, targets, unsafe_fixes=unsafe_fixes)
+        if statistics is not None:
+            _print_statistics(statistics, targets)
+        return rc
     except RuffError as e:
         msg = str(e)
         prefix = "" if msg.lower().startswith("error") else "error: "
@@ -179,6 +197,21 @@ def _rule_name(code: str) -> str:
         return json.loads(result.stdout).get("name", "")
     except json.JSONDecodeError:
         return ""
+
+
+def _print_statistics(select: str, targets: list[str]) -> None:
+    result = _run_ruff(
+        ["check", "--select", select, "--statistics", "--no-fix", *targets],
+        allow_violations=True,
+    )
+    data_lines = [ln for ln in result.stdout.splitlines() if ln and ln[0].isdigit()]
+    print()
+    if not data_lines:
+        print("remaining: none")
+        return
+    print("remaining:")
+    for line in data_lines:
+        print(line)
 
 
 def _build_message(rules_input: str, fixed: dict[str, int]) -> str:

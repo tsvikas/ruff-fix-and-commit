@@ -163,6 +163,40 @@ def test_no_fixable_violations(repo: git.Repo) -> None:
     assert repo.head.commit.hexsha == initial
 
 
+def test_statistics_shows_what_remains(repo: git.Repo) -> None:
+    add_file(
+        repo,
+        "t.py",
+        'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n    1\n    2\n',
+    )
+    r = run_rfc(repo, "B009", "--statistics", "B")
+    assert r.returncode == 0, r.stderr
+    assert "ruff-fix: B009 (get-attr-with-constant) x2" in r.stdout
+    assert "remaining:" in r.stdout
+    # B018 useless-expression isn't auto-fixable, so it should remain.
+    stats_section = r.stdout.split("remaining:", 1)[1]
+    assert "B018" in stats_section
+
+
+def test_statistics_when_nothing_left(repo: git.Repo) -> None:
+    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
+    r = run_rfc(repo, "B009", "--statistics", "B009")
+    assert r.returncode == 0, r.stderr
+    assert "remaining: none" in r.stdout
+
+
+def test_invalid_statistics_selector_runs_no_fix(repo: git.Repo) -> None:
+    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
+    initial = repo.head.commit.hexsha
+    file_before = (Path(repo.working_dir) / "t.py").read_text()
+    r = run_rfc(repo, "B009", "--statistics", "F731")
+    assert r.returncode == 2
+    assert "F731" in r.stderr
+    # The fix run is gated on the stats selector being valid.
+    assert repo.head.commit.hexsha == initial
+    assert (Path(repo.working_dir) / "t.py").read_text() == file_before
+
+
 def test_invalid_selector_returns_error(repo: git.Repo) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
     initial = repo.head.commit.hexsha
