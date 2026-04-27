@@ -151,7 +151,7 @@ def main(
 
     targets = _tracked_python_files(repo)
     if not targets:
-        print("Nothing to fix.")
+        print("No Python files to check.")
         return 0
 
     ruff = Ruff(targets, unsafe_fixes=unsafe_fixes)
@@ -228,7 +228,7 @@ def _tracked_python_files(repo: git.Repo) -> list[str]:
 
 def _report_nothing_fixed(ruff: Ruff, select: str, after: dict[str, RuleStat]) -> None:
     if not after:
-        print("Nothing to fix.")
+        print("No matching violations.")
         return
     print("no fixes applied:")
     for entry in sorted(after.values(), key=lambda e: (-e.count, e.code)):

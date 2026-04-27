@@ -159,7 +159,7 @@ def test_no_fixable_violations(repo: git.Repo) -> None:
     initial = repo.head.commit.hexsha
     r = run_rfc(repo, "B009")
     assert r.returncode == 0, r.stderr
-    assert "Nothing to fix" in r.stdout
+    assert "No matching violations" in r.stdout
     assert repo.head.commit.hexsha == initial
 
 
