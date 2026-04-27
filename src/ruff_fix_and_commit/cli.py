@@ -93,7 +93,7 @@ def _to_selector(s: Selector | str | None) -> Selector:
 class Ruff:
     """Adapter for invoking the ruff CLI against a fixed set of targets."""
 
-    def __init__(self, targets: list[str]) -> None:
+    def __init__(self, targets: list[Path]) -> None:
         self.targets = targets
 
     def stats(
@@ -334,13 +334,13 @@ def _do_fix_and_commit(
     return 0
 
 
-def _tracked_python_files(repo: git.Repo) -> list[str]:
+def _tracked_python_files(repo: git.Repo) -> list[Path]:
     suffixes = (".py", ".pyi", ".ipynb")
     root = Path(repo.working_dir)
     submodule_prefixes = tuple(f"{sm.path}/" for sm in repo.submodules)
     paths = repo.git.ls_files().splitlines()
     return [
-        str(root / p)
+        root / p
         for p in paths
         if p.endswith(suffixes) and not p.startswith(submodule_prefixes)
     ]
