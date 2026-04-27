@@ -300,7 +300,7 @@ def main(
         else:
             rc = _do_fix_and_commit(repo, ruff, select, unsafe_fixes=unsafe_fixes)
         if stats_selector is not None:
-            _print_statistics(
+            _print_remaining_issues_breakdown(
                 ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
             )
         return rc
@@ -362,7 +362,7 @@ def _do_fix_and_commit(
     message = _build_message(rules, fixed, names)
     repo.index.commit(message)
     print(message)
-    _print_remaining(after)
+    _print_unfixed_count(after)
     return ExitCode.OK
 
 
@@ -399,7 +399,7 @@ def _report_nothing_fixed(
         print(f"hint: {hidden} hidden fix{plural} can be enabled with --unsafe-fixes")
 
 
-def _print_remaining(after: dict[str, RuleStat]) -> None:
+def _print_unfixed_count(after: dict[str, RuleStat]) -> None:
     """Report any violations of the selected rules that remain after the fix.
 
     Uses the post-main-fix snapshot directly. The silent induced cleanup
@@ -417,7 +417,7 @@ def _print_remaining(after: dict[str, RuleStat]) -> None:
         print(f"{remaining} violations remain.")
 
 
-def _print_statistics(stats: dict[str, RuleStat]) -> None:
+def _print_remaining_issues_breakdown(stats: dict[str, RuleStat]) -> None:
     print()
     if not stats:
         print("remaining: none")
