@@ -185,6 +185,18 @@ def test_statistics_when_nothing_left(repo: git.Repo) -> None:
     assert "remaining: none" in r.stdout
 
 
+def test_statistics_default_uses_repo_selection(repo: git.Repo) -> None:
+    root = Path(repo.working_dir)
+    (root / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["B"]\n')
+    repo.index.add(["pyproject.toml"])
+    repo.index.commit("add config")
+    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    1\n')
+    r = run_rfc(repo, "B009", "--statistics", "DEFAULT")
+    assert r.returncode == 0, r.stderr
+    # B009 fixed; B018 (in repo's "B" selection) remains.
+    assert "B018" in r.stdout
+
+
 def test_invalid_statistics_selector_runs_no_fix(repo: git.Repo) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
     initial = repo.head.commit.hexsha

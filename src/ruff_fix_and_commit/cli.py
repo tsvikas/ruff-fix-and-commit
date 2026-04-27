@@ -14,6 +14,8 @@ app = cyclopts.App(name="ruff-fix-and-commit")
 
 _RUFF_ENV = {k: v for k, v in os.environ.items() if k != "RUFF_OUTPUT_FORMAT"}
 
+_DEFAULT_SENTINEL = "DEFAULT"
+
 
 class RuffError(Exception):
     """ruff exited with an unexpected status (config/usage error, not violations)."""
@@ -58,9 +60,9 @@ def main(
         Forwarded to ruff as `--unsafe-fixes`.
     statistics:
         After the fix, run `ruff check --select STATISTICS --statistics`
-        and print a per-rule count of what's still left. Useful to see
-        what couldn't be auto-fixed. Validated up front so a typo here
-        doesn't waste a fix run.
+        and print a per-rule count of what's still left. Pass `DEFAULT`
+        to omit `--select` and use the repo's configured rule selection.
+        Validated up front so a typo here doesn't waste a fix run.
     """
     try:
         repo = git.Repo(".", search_parent_directories=True)
@@ -174,16 +176,14 @@ def _format_check_clean(targets: list[str]) -> bool:
 def _stats(
     select: str, targets: list[str], *, unsafe_fixes: bool = False
 ) -> dict[str, dict]:
-    """Per-rule stats: ``{code: {code, name, count, fixable, fixable_count}}``."""
-    args = [
-        "check",
-        "--select",
-        select,
-        "--statistics",
-        "--no-fix",
-        "--output-format",
-        "json",
-    ]
+    """Per-rule stats: ``{code: {code, name, count, fixable, fixable_count}}``.
+
+    A `select` of ``"DEFAULT"`` (case-insensitive) omits ``--select`` so
+    ruff uses the repo's configured rule selection.
+    """
+    args = ["check", "--statistics", "--no-fix", "--output-format", "json"]
+    if select.upper() != _DEFAULT_SENTINEL:
+        args.extend(["--select", select])
     if unsafe_fixes:
         args.append("--unsafe-fixes")
     args.extend(targets)
