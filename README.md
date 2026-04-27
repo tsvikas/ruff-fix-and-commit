@@ -17,10 +17,10 @@ uv tool install .
 ## Usage
 
 ```bash
-ruff-fix-and-commit RULES [--unsafe-fixes] [--statistics SELECTOR]
+ruff-fix-and-commit [RULES] [--unsafe-fixes] [--statistics SELECTOR] [--ignore SELECTOR]
 ```
 
-`RULES` is a comma-separated ruff rule selector (codes or category prefixes), passed verbatim to `ruff --select`.
+`RULES` is a comma-separated ruff rule selector (codes or category prefixes), passed verbatim to `ruff --select`. If omitted, the tool runs in **status mode** (see below) instead of fixing.
 
 ### Examples
 
@@ -34,8 +34,11 @@ ruff-fix-and-commit E731 --unsafe-fixes
 # after fixing B009, show stats for everything in the repo's lint config
 ruff-fix-and-commit B009 --statistics DEFAULT
 
-# after fixing B009, show stats for any selector
-ruff-fix-and-commit B009 --statistics ALL
+# after fixing B009, show stats for any selector, suppressing noisy families
+ruff-fix-and-commit B009 --statistics ALL --ignore D,ANN
+
+# status mode: report whether the tree is formatted and induced rules are clear
+ruff-fix-and-commit
 ```
 
 ### Commit message format
@@ -46,10 +49,10 @@ Single rule fixed:
 ruff-fix: B009 (get-attr-with-constant) x2
 ```
 
-Multiple rules fixed:
+Multiple rules fixed (header shows the rules input verbatim and the total fix count):
 
 ```
-ruff-fix: A,B001,C212
+ruff-fix: A,B001,C212 x20
 
 - A123 (builtin-attribute-shadowing) x10
 - B001 (mutable-default-value) x7
@@ -58,21 +61,73 @@ ruff-fix: A,B001,C212
 
 ## Guarantees
 
-The tool **refuses to run** when:
+The tool **refuses to run a fix** when:
 
 - The current directory is not inside a git repository.
 - Any tracked file has uncommitted changes (untracked files are ignored).
+
+The dirty-tree gate is **skipped in status mode** (no `RULES` argument) since that path is read-only.
 
 The tool **never modifies**:
 
 - Untracked files (only tracked Python files are passed to ruff).
 - Files inside git submodules.
 
-After a successful fix, the tool:
+`--unsafe-fixes` is forwarded explicitly to ruff in both directions: when the flag is omitted, the tool sends `--no-unsafe-fixes` so a repo's `[tool.ruff] unsafe-fixes = true` cannot silently apply unsafe fixes.
 
-- Runs `ruff format` **only if** the codebase was already formatted before the fix.
-- Silently fixes new I001 (unsorted-imports) or F401 (unused-import) violations introduced by the fix — but only if the codebase had **zero** of those beforehand. Pre-existing I001/F401 are left alone.
-- Stages only modified tracked files (`git add -u`) and creates one commit.
+### Silent cleanup of induced rules
+
+A ruff fix can introduce I001 (unsorted-imports) or F401 (unused-import) violations as a side effect of fixing something else. To avoid leaving the tree dirtier than it was found, the tool runs a follow-up `--fix` pass for these "induced rules" — but **only** under conditions that match user intent:
+
+- The induced rule had **zero** violations before the fix (so any new violations were introduced by the run), **or**
+- The induced rule was **included in the user's selector** (so the user opted into fixing it).
+
+Otherwise, pre-existing I001/F401 violations are left alone.
+
+After the silent cleanup, if the tree was already formatted before the fix, `ruff format` is re-run so the resulting commit stays formatted.
+
+## Status mode
+
+When invoked **without** a `RULES` argument, the tool reports:
+
+```
+formatted: yes
+induced rules (I001, F401): clear
+```
+
+Or, if either is dirty:
+
+```
+formatted: no
+induced rules (I001, F401): not clear
+  3       I001    unsorted-imports
+  1       F401    unused-import
+```
+
+Status mode never fixes and never commits. If `--statistics` is passed, the stats block runs after the status report.
+
+## Output cases
+
+The tool's output is intentionally minimal. The exact stdout depends on the outcome:
+
+| Outcome | Output |
+|---|---|
+| Repo has no tracked Python files | `No Python files to check.` |
+| Files exist, no violations of `RULES` | `No matching violations.` |
+| Files exist, violations exist but none fixed | `no fixes applied:` + per-rule counts; `hint: N hidden fixes can be enabled with --unsafe-fixes` if applicable |
+| Some violations fixed, others remain | Commit message + `N violations remain.` (or `1 violation remains.`) footer |
+| All violations fixed | Commit message only |
+
+Add `--statistics SELECTOR` for a per-rule breakdown of what's left after the fix; combine with `--ignore D,ANN` to drop noisy families from that view.
+
+Example of the unfixable + hint path:
+
+```
+$ ruff-fix-and-commit E731
+no fixes applied:
+9       E731    [ ] lambda-assignment
+hint: 9 hidden fixes can be enabled with --unsafe-fixes
+```
 
 ## Exit codes
 
@@ -81,17 +136,6 @@ After a successful fix, the tool:
 | `0`  | Success, or nothing to fix |
 | `1`  | Refused (not in a repo, dirty tracked files) |
 | `2`  | ruff failed (invalid selector, etc.) |
-
-## Output
-
-When the fix succeeds, the only output is the commit message. When the user's selector matches violations but none could be auto-fixed, the per-rule counts are shown along with a hint about `--unsafe-fixes` if it would unlock fixes:
-
-```
-$ ruff-fix-and-commit E731
-no fixes applied:
-9	E731	[ ] lambda-assignment
-hint: 9 hidden fixes can be enabled with --unsafe-fixes
-```
 
 ## Development
 
