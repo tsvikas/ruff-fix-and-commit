@@ -249,7 +249,7 @@ def _do_fix_and_commit(repo: git.Repo, ruff: Ruff, rules: str) -> int:
     message = _build_message(rules, fixed, names)
     repo.index.commit(message)
     print(message)
-    _print_remaining(ruff, rules)
+    _print_remaining(after)
     return 0
 
 
@@ -282,9 +282,16 @@ def _report_nothing_fixed(ruff: Ruff, select: str, after: dict[str, RuleStat]) -
         print(f"hint: {hidden} hidden fix{plural} can be enabled with --unsafe-fixes")
 
 
-def _print_remaining(ruff: Ruff, rules: str) -> None:
-    """Re-query post-fix state and report any violations of `rules` that remain."""
-    remaining = sum(s.count for s in ruff.check(rules).values())
+def _print_remaining(after: dict[str, RuleStat]) -> None:
+    """Report any violations of the selected rules that remain after the fix.
+
+    Uses the post-main-fix snapshot directly. The silent induced cleanup
+    runs only on I001/F401 (typically not in the user's `rules`) and
+    `ruff format` is shape-only, so re-querying would yield the same
+    number for normal selectors. Format-sensitive rules in `rules`
+    (e.g., E501) are an acceptable inaccuracy.
+    """
+    remaining = sum(s.count for s in after.values())
     if remaining == 0:
         return
     if remaining == 1:
