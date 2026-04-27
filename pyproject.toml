@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ruff-fix-and-commit"
+version = "0.1.0"
+description = "Run ruff --fix for selected rules and commit the result with a per-rule summary."
+requires-python = ">=3.11"
+dependencies = [
+    "cyclopts>=3",
+    "gitpython>=3.1",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+ruff-fix-and-commit = "ruff_fix_and_commit.cli:_entry"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ruff_fix_and_commit"]
