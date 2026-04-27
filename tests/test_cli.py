@@ -285,6 +285,53 @@ def test_ruff_chatter_silenced(repo: git.Repo) -> None:
         assert noise not in r.stderr, f"unexpected ruff output: {noise!r}"
 
 
+def test_status_mode_clean_repo(repo: git.Repo) -> None:
+    add_file(repo, "t.py", "def f():\n    return 1\n")
+    initial = repo.head.commit.hexsha
+    r = run_rfc(repo)
+    assert r.returncode == 0, r.stderr
+    assert "formatted: yes" in r.stdout
+    assert "induced rules (I001, F401): clear" in r.stdout
+    assert repo.head.commit.hexsha == initial
+
+
+def test_status_mode_unformatted_and_induced_violations(repo: git.Repo) -> None:
+    add_file(
+        repo,
+        "t.py",
+        "import sys\nimport os\n\n\ndef f( ):\n    return sys.path, os.getcwd()\n",
+    )
+    initial = repo.head.commit.hexsha
+    r = run_rfc(repo)
+    assert r.returncode == 0, r.stderr
+    assert "formatted: no" in r.stdout
+    assert "induced rules (I001, F401): not clear" in r.stdout
+    assert "I001" in r.stdout
+    assert repo.head.commit.hexsha == initial
+
+
+def test_status_mode_with_statistics(repo: git.Repo) -> None:
+    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    1\n')
+    initial = repo.head.commit.hexsha
+    r = run_rfc(repo, "--statistics", "B")
+    assert r.returncode == 0, r.stderr
+    assert "formatted:" in r.stdout
+    assert "remaining:" in r.stdout
+    # No fix happened, so B009 should still be there.
+    assert "B009" in r.stdout
+    assert repo.head.commit.hexsha == initial
+
+
+def test_status_mode_runs_on_dirty_tree(repo: git.Repo) -> None:
+    p = add_file(repo, "t.py", "def f():\n    return 1\n")
+    p.write_text("def f():\n    return 1\n# extra\n")
+    initial = repo.head.commit.hexsha
+    r = run_rfc(repo)
+    assert r.returncode == 0, r.stderr
+    assert "formatted:" in r.stdout
+    assert repo.head.commit.hexsha == initial
+
+
 def test_submodule_files_not_modified(tmp_path: Path) -> None:
     inner = tmp_path / "inner"
     inner.mkdir()

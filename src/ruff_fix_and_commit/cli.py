@@ -127,7 +127,7 @@ def _resolve_select(select: str) -> str | None:
 
 @app.default
 def main(
-    rules: str,
+    rules: str | None = None,
     *,
     unsafe_fixes: bool = False,
     statistics: str | None = None,
@@ -139,7 +139,10 @@ def main(
     ----------
     rules:
         Comma-separated ruff rule selectors (codes or category prefixes),
-        passed verbatim to `ruff --select`. Example: `A,B001,C212`.
+        passed verbatim to `ruff --select`. Example: `A,B001,C212`. If
+        omitted, the tool runs in status mode: it reports whether the
+        repo is formatted and whether the induced rules (I001, F401)
+        are clear, without fixing or committing.
     unsafe_fixes:
         Forwarded to ruff as `--unsafe-fixes`.
     statistics:
@@ -156,7 +159,9 @@ def main(
     except git.InvalidGitRepositoryError:
         print("error: not inside a git repository", file=sys.stderr)
         return 1
-    if repo.is_dirty(untracked_files=False):
+    # Dirty-tree gate only applies when we plan to fix + commit; status
+    # mode is read-only and safe to run on a dirty tree.
+    if rules is not None and repo.is_dirty(untracked_files=False):
         print(
             "error: working tree has uncommitted changes to tracked files; "
             "commit or stash them first",
@@ -175,6 +180,11 @@ def main(
         if statistics is not None:
             # Validate up front (cheap call); raises RuffError if selector is bad.
             ruff.check(_resolve_select(statistics), ignore=ignore)
+        if rules is None:
+            _print_status(ruff)
+            if statistics is not None:
+                _print_statistics(ruff, _resolve_select(statistics), ignore=ignore)
+            return 0
         rc = _do_fix_and_commit(repo, ruff, rules)
         if statistics is not None:
             _print_statistics(ruff, _resolve_select(statistics), ignore=ignore)
@@ -184,6 +194,19 @@ def main(
         prefix = "" if msg.lower().startswith("error") else "error: "
         print(f"{prefix}{msg}", file=sys.stderr)
         return 2
+
+
+def _print_status(ruff: Ruff) -> None:
+    """Status output for the no-rules path: format + induced-rules cleanliness."""
+    formatted = ruff.format_check()
+    induced = ruff.check(",".join(RUFF_INDUCED_RULES))
+    print(f"formatted: {'yes' if formatted else 'no'}")
+    if not induced:
+        print(f"induced rules ({', '.join(RUFF_INDUCED_RULES)}): clear")
+        return
+    print(f"induced rules ({', '.join(RUFF_INDUCED_RULES)}): not clear")
+    for entry in sorted(induced.values(), key=lambda e: (-e.count, e.code)):
+        print(f"  {entry.count}\t{entry.code}\t{entry.name}")
 
 
 def _do_fix_and_commit(repo: git.Repo, ruff: Ruff, rules: str) -> int:
