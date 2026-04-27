@@ -276,7 +276,8 @@ def _build_message(
     if len(items) == 1:
         code, count = items[0]
         return f"ruff-fix: {code} ({names.get(code, '')}) x{count}"
-    lines = [f"ruff-fix: {rules_input}", ""]
+    total = sum(count for _, count in items)
+    lines = [f"ruff-fix: {rules_input} x{total}", ""]
     lines.extend(f"- {code} ({names.get(code, '')}) x{count}" for code, count in items)
     return "\n".join(lines)
 

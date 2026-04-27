@@ -74,7 +74,7 @@ def test_multi_rule_body_sorted_by_count(repo: git.Repo) -> None:
     r = run_rfc(repo, "B009,UP008")
     assert r.returncode == 0, r.stderr
     assert repo.head.commit.message.strip() == (
-        "ruff-fix: B009,UP008\n"
+        "ruff-fix: B009,UP008 x5\n"
         "\n"
         "- B009 (get-attr-with-constant) x3\n"
         "- UP008 (super-call-with-parameters) x2"
