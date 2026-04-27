@@ -282,8 +282,8 @@ def _build_message(
 
 
 def _entry() -> None:
-    raise SystemExit(app() or 0)
+    app()
 
 
 if __name__ == "__main__":
-    _entry()
+    app()
