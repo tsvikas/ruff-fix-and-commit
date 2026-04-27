@@ -163,6 +163,28 @@ def test_no_fixable_violations(repo: git.Repo) -> None:
     assert repo.head.commit.hexsha == initial
 
 
+def test_unsafe_only_violations_hint_at_unsafe_fixes(repo: git.Repo) -> None:
+    add_file(repo, "t.py", "f = lambda x: x + 1\ng = lambda y: y * 2\n")
+    initial = repo.head.commit.hexsha
+    r = run_rfc(repo, "E731")  # E731's fix is always unsafe
+    assert r.returncode == 0, r.stderr
+    assert "no fixes applied" in r.stdout
+    assert "E731" in r.stdout
+    assert "--unsafe-fixes" in r.stdout
+    assert repo.head.commit.hexsha == initial
+
+
+def test_unfixable_violations_no_unsafe_fixes_hint(repo: git.Repo) -> None:
+    add_file(repo, "t.py", "def f(l):\n    return l + 1\n")
+    initial = repo.head.commit.hexsha
+    r = run_rfc(repo, "E741")  # E741 has no fix at all
+    assert r.returncode == 0, r.stderr
+    assert "no fixes applied" in r.stdout
+    assert "E741" in r.stdout
+    assert "--unsafe-fixes" not in r.stdout
+    assert repo.head.commit.hexsha == initial
+
+
 def test_statistics_shows_what_remains(repo: git.Repo) -> None:
     add_file(
         repo,

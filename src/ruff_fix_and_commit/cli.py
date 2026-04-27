@@ -128,7 +128,7 @@ def _do_fix_and_commit(
             fixed[code] = delta
 
     if not fixed:
-        print("Nothing to fix.")
+        _report_nothing_fixed(rules, targets, after, unsafe_fixes=unsafe_fixes)
         return 0
 
     silent_codes: list[str] = []
@@ -198,6 +198,25 @@ def _parse_stats(stdout: str) -> dict[str, dict]:
         return {entry["code"]: entry for entry in json.loads(stdout)}
     except json.JSONDecodeError:
         return {}
+
+
+def _report_nothing_fixed(
+    select: str, targets: list[str], after: dict[str, dict], *, unsafe_fixes: bool
+) -> None:
+    if not after:
+        print("Nothing to fix.")
+        return
+    print("no fixes applied:")
+    for entry in sorted(after.values(), key=lambda e: (-e["count"], e["code"])):
+        marker = "[*]" if entry["fixable"] else "[ ]"
+        print(f"{entry['count']}\t{entry['code']}\t{marker} {entry['name']}")
+    if unsafe_fixes:
+        return
+    unsafe_after = _stats(select, targets, unsafe_fixes=True)
+    hidden = sum(e["fixable_count"] for e in unsafe_after.values())
+    if hidden > 0:
+        plural = "es" if hidden != 1 else ""
+        print(f"hint: {hidden} hidden fix{plural} can be enabled with --unsafe-fixes")
 
 
 def _print_statistics(select: str, targets: list[str], *, unsafe_fixes: bool) -> None:
