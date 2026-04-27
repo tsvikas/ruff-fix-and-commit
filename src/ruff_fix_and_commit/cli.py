@@ -201,6 +201,10 @@ class Ruff:
                 or result.stdout.strip()
                 or f"ruff exited with code {result.returncode}"
             )
+            # ruff stderr often starts with "error: ..."; strip it here so
+            # callers can prepend their own prefix without double-prefixing.
+            if msg.lower().startswith("error:"):
+                msg = msg[len("error:") :].lstrip()
             raise RuffError(msg)
         return result
 
@@ -301,9 +305,7 @@ def main(
             )
         return rc
     except RuffError as e:
-        msg = str(e)
-        prefix = "" if msg.lower().startswith("error") else "error: "
-        print(f"{prefix}{msg}", file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         return ExitCode.RUFF_ERROR
 
 
