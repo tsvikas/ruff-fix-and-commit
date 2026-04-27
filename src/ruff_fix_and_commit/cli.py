@@ -98,8 +98,13 @@ def main(rules: str, *, unsafe_fixes: bool = False) -> int:
 def _tracked_python_files(repo: git.Repo) -> list[str]:
     suffixes = (".py", ".pyi", ".ipynb")
     root = repo.working_dir
+    submodule_prefixes = tuple(f"{sm.path}/" for sm in repo.submodules)
     paths = repo.git.ls_files().splitlines()
-    return [os.path.join(root, p) for p in paths if p.endswith(suffixes)]
+    return [
+        os.path.join(root, p)
+        for p in paths
+        if p.endswith(suffixes) and not p.startswith(submodule_prefixes)
+    ]
 
 
 def _format_check_clean(targets: list[str]) -> bool:
