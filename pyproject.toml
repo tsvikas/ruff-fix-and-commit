@@ -16,5 +16,13 @@ dependencies = [
 [project.scripts]
 ruff-fix-and-commit = "ruff_fix_and_commit.cli:_entry"
 
+[dependency-groups]
+dev = [
+    "pytest>=7",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/ruff_fix_and_commit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
