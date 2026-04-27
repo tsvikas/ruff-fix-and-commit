@@ -102,16 +102,16 @@ When invoked **without** `--select`, the tool reports:
 
 ```
 formatted: yes
-induced rules (I001, F401): clear
+I001 unsorted-imports: clean
+F401 unused-import: clean
 ```
 
-Or, if either is dirty:
+Each induced rule shows either `clean` or its current violation count:
 
 ```
 formatted: no
-induced rules (I001, F401): not clear
-  3       I001    unsorted-imports
-  1       F401    unused-import
+I001 unsorted-imports: 3
+F401 unused-import: 1
 ```
 
 Status mode never fixes and never commits. If `--statistics` is passed, the stats block runs after the status report.

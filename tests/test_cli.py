@@ -321,7 +321,8 @@ def test_status_mode_clean_repo(
     assert run([]) == 0
     out = capsys.readouterr().out
     assert "formatted: yes" in out
-    assert "induced rules (I001, F401): clear" in out
+    assert "I001 unsorted-imports: clean" in out
+    assert "F401 unused-import: clean" in out
     assert repo.head.commit.hexsha == initial
 
 
@@ -337,8 +338,8 @@ def test_status_mode_unformatted_and_induced_violations(
     assert run([]) == 0
     out = capsys.readouterr().out
     assert "formatted: no" in out
-    assert "induced rules (I001, F401): not clear" in out
-    assert "I001" in out
+    assert "I001 unsorted-imports: 1" in out
+    assert "F401 unused-import: clean" in out
     assert repo.head.commit.hexsha == initial
 
 

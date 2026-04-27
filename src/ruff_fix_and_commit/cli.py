@@ -32,8 +32,13 @@ class ExitCode(IntEnum):
 
 # Rules whose violations a ruff fix can introduce as a side effect of fixing
 # something else. We post-fix-clean these so a ruff-fix-and-commit run never
-# leaves the tree dirtier than it found it.
-RUFF_INDUCED_RULES: tuple[str, ...] = ("I001", "F401")
+# leaves the tree dirtier than it found it. Maps code -> human name so the
+# status output can show the name even when the rule is clean (and ruff's
+# JSON has nothing to report).
+RUFF_INDUCED_RULES: dict[str, str] = {
+    "I001": "unsorted-imports",
+    "F401": "unused-import",
+}
 
 
 class RuffError(Exception):
@@ -305,16 +310,14 @@ def main(
 
 
 def _print_status(ruff: Ruff) -> None:
-    """Status output for the no-rules path: format + induced-rules cleanliness."""
+    """Status output for the no-rules path: format + per-induced-rule cleanliness."""
     formatted = ruff.format_check()
     induced = ruff.stats(",".join(RUFF_INDUCED_RULES))
     print(f"formatted: {'yes' if formatted else 'no'}")
-    if not induced:
-        print(f"induced rules ({', '.join(RUFF_INDUCED_RULES)}): clear")
-        return
-    print(f"induced rules ({', '.join(RUFF_INDUCED_RULES)}): not clear")
-    for entry in sorted(induced.values(), key=lambda e: (-e.count, e.code)):
-        print(f"  {entry.count}\t{entry.code}\t{entry.name}")
+    for code, name in RUFF_INDUCED_RULES.items():
+        entry = induced.get(code)
+        state = entry.count if entry else "clean"
+        print(f"{code} {name}: {state}")
 
 
 def _do_fix_and_commit(
