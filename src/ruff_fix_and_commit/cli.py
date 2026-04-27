@@ -224,17 +224,21 @@ def _parse_stats(stdout: str) -> dict[str, RuleStat]:
 
 @app.default
 def main(
-    rules: str | None = None,
+    target: Path = Path(),
     *,
+    select: str | None = None,
     unsafe_fixes: bool = False,
     statistics: str | None = None,
     ignore: str | None = None,
 ) -> ExitCode:
-    """Run `ruff check --fix` for RULES and commit the changes.
+    """Run `ruff check --fix` for `--select` rules under TARGET and commit the changes.
 
     Parameters
     ----------
-    rules:
+    target:
+        Path to restrict the run to. Only tracked Python files under
+        this path are passed to ruff. Defaults to the current directory.
+    select:
         Comma-separated ruff rule selectors (codes or category prefixes),
         passed verbatim to `ruff --select`. Example: `A,B001,C212`. If
         omitted, the tool runs in status mode: it reports whether the
@@ -259,7 +263,7 @@ def main(
         return ExitCode.REFUSED
     # Dirty-tree gate only applies when we plan to fix + commit; status
     # mode is read-only and safe to run on a dirty tree.
-    if rules is not None and repo.is_dirty(untracked_files=False):
+    if select is not None and repo.is_dirty(untracked_files=False):
         print(
             "error: working tree has uncommitted changes to tracked files; "
             "commit or stash them first",
@@ -267,7 +271,7 @@ def main(
         )
         return ExitCode.REFUSED
 
-    targets = _tracked_python_files(repo)
+    targets = _tracked_python_files(repo, target)
     if not targets:
         print("No Python files to check.")
         return ExitCode.OK
@@ -279,14 +283,14 @@ def main(
         if stats_selector is not None:
             # Validate up front (cheap call); raises RuffError if selector is bad.
             ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
-        if rules is None:
+        if select is None:
             _print_status(ruff)
             if stats_selector is not None:
                 _print_statistics(
                     ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
                 )
             return ExitCode.OK
-        rc = _do_fix_and_commit(repo, ruff, rules, unsafe_fixes=unsafe_fixes)
+        rc = _do_fix_and_commit(repo, ruff, select, unsafe_fixes=unsafe_fixes)
         if stats_selector is not None:
             _print_statistics(
                 ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
@@ -359,15 +363,18 @@ def _do_fix_and_commit(
     return ExitCode.OK
 
 
-def _tracked_python_files(repo: git.Repo) -> list[Path]:
+def _tracked_python_files(repo: git.Repo, target: Path) -> list[Path]:
     suffixes = (".py", ".pyi", ".ipynb")
     root = Path(repo.working_dir)
     submodule_prefixes = tuple(f"{sm.path}/" for sm in repo.submodules)
     paths = repo.git.ls_files().splitlines()
+    target_abs = target.resolve()
     return [
         root / p
         for p in paths
-        if p.endswith(suffixes) and not p.startswith(submodule_prefixes)
+        if p.endswith(suffixes)
+        and not p.startswith(submodule_prefixes)
+        and (root / p).is_relative_to(target_abs)
     ]
 
 

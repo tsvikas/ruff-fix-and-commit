@@ -7,7 +7,7 @@ Notes for Claude when working on this project.
 The four guarantees that all behavior tests exercise:
 
 1. **Refuse on dirty tracked tree.** `repo.is_dirty(untracked_files=False)` — untracked files are explicitly ignored so they don't block a run, and never make it into the commit either.
-2. **Operate only on tracked Python files.** `_tracked_python_files()` returns absolute paths from `git ls-files`, filtered to `.py` / `.pyi` / `.ipynb`, with submodule mount points excluded. Passing the file list explicitly to ruff (instead of `.`) means untracked files and submodule contents are never even read.
+2. **Operate only on tracked Python files under TARGET.** `_tracked_python_files(repo, target)` returns absolute paths from `git ls-files`, filtered to `.py` / `.pyi` / `.ipynb`, with submodule mount points excluded and restricted to files under the `target` argument (defaults to cwd). Passing the file list explicitly to ruff (instead of `.`) means untracked files and submodule contents are never even read.
 3. **Format invariant.** If `ruff format --check` was clean before the fix, run `ruff format` after. If it wasn't, don't reformat — the tool never *introduces* formatting.
 4. **Silent I001/F401 cleanup.** If pre-state had **zero** I001 or F401 violations and the user's fix introduced some, fix them silently. If pre-state already had them, leave them alone — they belong to whatever the user is doing in another commit.
 
@@ -27,7 +27,7 @@ Plus, conditionally: silent I001/F401 fix, post-fix `ruff format`, and one extra
 
 ## CLI shape
 
-`cyclopts` parses the function signature directly. `--statistics SELECTOR` accepts any ruff selector; the literal `DEFAULT` (case-insensitive) omits `--select` so ruff uses the repo's configured rule selection.
+`cyclopts` parses the function signature directly. The positional is `TARGET` (path; defaults to `.`); rules go through `--select`. `--statistics SELECTOR` accepts any ruff selector; the literal `DEFAULT` (case-insensitive) omits `--select` so ruff uses the repo's configured rule selection.
 
 ## Tests
 

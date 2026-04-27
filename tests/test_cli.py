@@ -46,7 +46,7 @@ def add_file(repo: git.Repo, name: str, content: str) -> Path:
 
 def test_single_rule(repo: git.Repo) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n')
-    assert run(["B009"]) == 0
+    assert run(["--select", "B009"]) == 0
     assert (
         repo.head.commit.message.strip() == "ruff-fix: B009 (get-attr-with-constant) x2"
     )
@@ -64,7 +64,7 @@ def test_multi_rule_body_sorted_by_count(repo: git.Repo) -> None:
         '        getattr(o, "y")\n'
         '        getattr(o, "z")\n',
     )
-    assert run(["B009,UP008"]) == 0
+    assert run(["--select", "B009,UP008"]) == 0
     assert repo.head.commit.message.strip() == (
         "ruff-fix: B009,UP008 x5\n"
         "\n"
@@ -76,9 +76,9 @@ def test_multi_rule_body_sorted_by_count(repo: git.Repo) -> None:
 def test_unsafe_fixes_gating(repo: git.Repo) -> None:
     add_file(repo, "t.py", "def f():\n    z = dict()\n")
     initial = repo.head.commit.hexsha
-    assert run(["C408"]) == 0
+    assert run(["--select", "C408"]) == 0
     assert repo.head.commit.hexsha == initial
-    assert run(["C408", "--unsafe-fixes"]) == 0
+    assert run(["--select", "C408", "--unsafe-fixes"]) == 0
     assert repo.head.commit.hexsha != initial
     assert (
         repo.head.commit.message.strip()
@@ -88,7 +88,7 @@ def test_unsafe_fixes_gating(repo: git.Repo) -> None:
 
 def test_unformatted_pre_state_preserved(repo: git.Repo) -> None:
     p = add_file(repo, "t.py", 'def f( ):\n    getattr( o , "a" )\n')
-    assert run(["B009"]) == 0
+    assert run(["--select", "B009"]) == 0
     assert "def f( ):" in p.read_text()
 
 
@@ -103,7 +103,7 @@ def test_preexisting_i001_left_alone_when_not_selected(repo: git.Repo) -> None:
         "    print(sys.path, os.getcwd())\n"
         '    getattr(o, "a")\n',
     )
-    assert run(["B009"]) == 0
+    assert run(["--select", "B009"]) == 0
     assert p.read_text().startswith("import sys\nimport os\n")
 
 
@@ -113,7 +113,7 @@ def test_preexisting_i001_fixed_and_credited_when_selected(repo: git.Repo) -> No
         "t.py",
         "import sys\nimport os\n\ndef f():\n    return sys.path, os.getcwd()\n",
     )
-    assert run(["I001"]) == 0
+    assert run(["--select", "I001"]) == 0
     assert repo.head.commit.message.strip() == "ruff-fix: I001 (unsorted-imports) x1"
     assert p.read_text().startswith("import os\nimport sys\n")
 
@@ -122,7 +122,7 @@ def test_dirty_tree_refused(repo: git.Repo, capsys: pytest.CaptureFixture[str]) 
     p = add_file(repo, "t.py", "def f():\n    pass\n")
     initial = repo.head.commit.hexsha
     p.write_text("def f():\n    pass\n# extra\n")
-    rc = run(["B009"])
+    rc = run(["--select", "B009"])
     captured = capsys.readouterr()
     assert rc == 1
     assert "uncommitted changes" in captured.err
@@ -134,7 +134,7 @@ def test_untracked_file_isolation(repo: git.Repo) -> None:
     extra = Path(repo.working_dir) / "extra.py"
     extra.write_text('def g():\n    getattr(o, "b")\n')
     extra_before = extra.read_text()
-    assert run(["B009"]) == 0
+    assert run(["--select", "B009"]) == 0
     assert extra.read_text() == extra_before
     diff = repo.git.show("--stat", "HEAD")
     assert "t.py" in diff
@@ -146,7 +146,7 @@ def test_no_fixable_violations(
 ) -> None:
     add_file(repo, "t.py", "def f(x):\n    return x + 1\n")
     initial = repo.head.commit.hexsha
-    assert run(["B009"]) == 0
+    assert run(["--select", "B009"]) == 0
     assert "No matching violations" in capsys.readouterr().out
     assert repo.head.commit.hexsha == initial
 
@@ -160,7 +160,7 @@ def test_partial_fix_reports_remaining(
         'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n\n'
         "g = lambda x: x + 1\nh = lambda y: y + 2\n",
     )
-    assert run(["B009,E731"]) == 0
+    assert run(["--select", "B009,E731"]) == 0
     out = capsys.readouterr().out
     # B009 was fixable (safe); E731 is unsafe-only and stays.
     assert "ruff-fix: B009 (get-attr-with-constant) x2" in out
@@ -171,7 +171,7 @@ def test_full_fix_no_remaining_footer(
     repo: git.Repo, capsys: pytest.CaptureFixture[str]
 ) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
-    assert run(["B009"]) == 0
+    assert run(["--select", "B009"]) == 0
     assert "remain" not in capsys.readouterr().out
 
 
@@ -180,7 +180,7 @@ def test_unsafe_only_violations_hint_at_unsafe_fixes(
 ) -> None:
     add_file(repo, "t.py", "f = lambda x: x + 1\ng = lambda y: y * 2\n")
     initial = repo.head.commit.hexsha
-    assert run(["E731"]) == 0  # E731's fix is always unsafe
+    assert run(["--select", "E731"]) == 0  # E731's fix is always unsafe
     out = capsys.readouterr().out
     assert "no fixes applied" in out
     assert "E731" in out
@@ -193,7 +193,7 @@ def test_unfixable_violations_no_unsafe_fixes_hint(
 ) -> None:
     add_file(repo, "t.py", "def f(l):\n    return l + 1\n")
     initial = repo.head.commit.hexsha
-    assert run(["E741"]) == 0  # E741 has no fix at all
+    assert run(["--select", "E741"]) == 0  # E741 has no fix at all
     out = capsys.readouterr().out
     assert "no fixes applied" in out
     assert "E741" in out
@@ -209,7 +209,7 @@ def test_statistics_shows_what_remains(
         "t.py",
         'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n    1\n    2\n',
     )
-    assert run(["B009", "--statistics", "B"]) == 0
+    assert run(["--select", "B009", "--statistics", "B"]) == 0
     out = capsys.readouterr().out
     assert "ruff-fix: B009 (get-attr-with-constant) x2" in out
     assert "remaining:" in out
@@ -222,7 +222,7 @@ def test_statistics_when_nothing_left(
     repo: git.Repo, capsys: pytest.CaptureFixture[str]
 ) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
-    assert run(["B009", "--statistics", "B009"]) == 0
+    assert run(["--select", "B009", "--statistics", "B009"]) == 0
     assert "remaining: none" in capsys.readouterr().out
 
 
@@ -234,7 +234,7 @@ def test_statistics_default_uses_repo_selection(
     repo.index.add(["pyproject.toml"])
     repo.index.commit("add config")
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    1\n')
-    assert run(["B009", "--statistics", "DEFAULT"]) == 0
+    assert run(["--select", "B009", "--statistics", "DEFAULT"]) == 0
     # B009 fixed; B018 (in repo's "B" selection) remains.
     assert "B018" in capsys.readouterr().out
 
@@ -249,7 +249,7 @@ def test_statistics_ignore_drops_matching_rules(
     )
     # Without --ignore, B018 (useless-expression) would remain.
     # With --ignore B018, the stats output should show "remaining: none".
-    assert run(["B009", "--statistics", "B", "--ignore", "B018"]) == 0
+    assert run(["--select", "B009", "--statistics", "B", "--ignore", "B018"]) == 0
     assert "remaining: none" in capsys.readouterr().out
 
 
@@ -265,7 +265,7 @@ def test_statistics_default_with_extend(
         "t.py",
         'def f(l):\n    getattr(o, "a")\n    1\n    return l\n',
     )
-    assert run(["B009", "--statistics", "DEFAULT,E"]) == 0
+    assert run(["--select", "B009", "--statistics", "DEFAULT,E"]) == 0
     out = capsys.readouterr().out
     # B018 stays from the repo's "B" selection (DEFAULT branch);
     # E741 (ambiguous variable name `l`) is added via extend.
@@ -279,7 +279,7 @@ def test_invalid_statistics_selector_runs_no_fix(
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
     initial = repo.head.commit.hexsha
     file_before = (Path(repo.working_dir) / "t.py").read_text()
-    rc = run(["B009", "--statistics", "F731"])
+    rc = run(["--select", "B009", "--statistics", "F731"])
     err = capsys.readouterr().err
     assert rc == ExitCode.RUFF_ERROR
     assert "F731" in err
@@ -293,7 +293,7 @@ def test_invalid_selector_returns_error(
 ) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
     initial = repo.head.commit.hexsha
-    rc = run(["F731"])  # F731 is not a valid selector
+    rc = run(["--select", "F731"])  # F731 is not a valid selector
     err = capsys.readouterr().err
     assert rc == ExitCode.RUFF_ERROR
     assert "F731" in err
@@ -304,7 +304,7 @@ def test_ruff_chatter_silenced(
     repo: git.Repo, capsys: pytest.CaptureFixture[str]
 ) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n')
-    assert run(["B009"]) == 0
+    assert run(["--select", "B009"]) == 0
     captured = capsys.readouterr()
     # Our user-facing output should be just the commit message; ruff's own
     # progress chatter should not leak through.
@@ -367,6 +367,20 @@ def test_status_mode_runs_on_dirty_tree(
     assert repo.head.commit.hexsha == initial
 
 
+def test_target_restricts_to_subdirectory(repo: git.Repo) -> None:
+    root = Path(repo.working_dir)
+    (root / "src").mkdir()
+    (root / "other").mkdir()
+    add_file(repo, "src/a.py", 'def f():\n    getattr(o, "a")\n')
+    add_file(repo, "other/b.py", 'def g():\n    getattr(o, "b")\n')
+    other_before = (root / "other" / "b.py").read_text()
+    assert run(["src/", "--select", "B009"]) == 0
+    assert (root / "other" / "b.py").read_text() == other_before
+    diff = repo.git.show("--stat", "HEAD")
+    assert "src/a.py" in diff
+    assert "other/b.py" not in diff
+
+
 def test_submodule_files_not_modified(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -406,7 +420,7 @@ def test_submodule_files_not_modified(
     sub_gitlink_before = outer_repo.git.ls_tree("HEAD", "sub")
 
     monkeypatch.chdir(outer)
-    assert run(["B009"]) == 0
+    assert run(["--select", "B009"]) == 0
     assert inner_path.read_text() == inner_before
     diff = outer_repo.git.show("--stat", "HEAD")
     assert "outer.py" in diff
