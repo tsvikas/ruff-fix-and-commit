@@ -13,15 +13,14 @@ The four guarantees that all behavior tests exercise:
 
 ## Ruff plumbing
 
-Every ruff invocation goes through `_run_ruff` (silenced by default; raises `RuffError` on non-{0,1} exit codes for stats/fix calls). Five calls on the happy path:
+Every ruff invocation goes through `Ruff._run` (silenced by default; raises `RuffError` on non-{0,1} exit codes for stats/fix calls). Four calls on the happy path:
 
 1. `ruff format --check <files>` — pre-state format check.
-2. `ruff check --select I001 --statistics --no-fix --output-format json <files>` — `had_i001_pre`.
-3. `ruff check --select F401 --statistics --no-fix --output-format json <files>` — `had_f401_pre`.
-4. `ruff check --select <rules> --statistics --no-fix --output-format json <files>` — `before` counts and rule names.
-5. `ruff check --select <rules> --fix --statistics --output-format json [--unsafe-fixes] <files>` — applies the fix **and** returns post-fix per-rule counts in one call.
+2. `ruff check --select <rules> --statistics --no-fix --output-format json <files>` — `before` counts and rule names.
+3. `ruff check --select I001,F401 --statistics --no-fix --output-format json <files>` — `before_induced` (single call covers both induced rules).
+4. `ruff check --select <rules> --fix --statistics --output-format json (--unsafe-fixes|--no-unsafe-fixes) <files>` — applies the fix **and** returns post-fix per-rule counts in one call. The unsafe flag is always passed explicitly so a repo's `unsafe-fixes = true` config cannot override our intent.
 
-Plus, conditionally: silent I001/F401 fix, post-fix `ruff format`, and one extra `_stats(..., unsafe_fixes=True)` only on the no-fix-applied path to compute the "hidden fixes" hint.
+Plus, conditionally: silent I001/F401 fix, post-fix `ruff format`, and one extra `ruff.stats(..., unsafe_fixes=True)` only on the no-fix-applied path to compute the "hidden fixes" hint.
 
 `RUFF_OUTPUT_FORMAT` is stripped from the subprocess env so `ruff format` doesn't print the "unstable in non-preview" warning when the user has it set.
 
@@ -31,7 +30,7 @@ Plus, conditionally: silent I001/F401 fix, post-fix `ruff format`, and one extra
 
 ## Tests
 
-End-to-end via `subprocess` against the installed venv binary at `Path(sys.executable).parent / "ruff-fix-and-commit"`. Tests require `uv pip install -e .` to be run first so the binary exists.
+In-process via the cyclopts `app`, with `result_action="return_value"` so the command returns the exit-code int instead of `sys.exit`-ing. Tests bind `run = partial(app, result_action="return_value")` and call `run([...])`.
 
 Each test repo is initialized via `_make_repo()` which sets local `user.name`/`email` and disables signing, so the host's git identity and SSH/GPG keys never matter.
 
