@@ -50,25 +50,42 @@ class RuleStat:
 class Ruff:
     """Adapter for invoking the ruff CLI against a fixed set of targets."""
 
-    def __init__(self, targets: list[str], *, unsafe_fixes: bool = False) -> None:
+    def __init__(self, targets: list[str]) -> None:
         self.targets = targets
-        self.unsafe_fixes = unsafe_fixes
 
-    def check(
+    def stats(
+        self,
+        select: str | None = None,
+        *,
+        unsafe_fixes: bool = False,
+        ignore: str | None = None,
+    ) -> dict[str, RuleStat]:
+        """Read-only: query per-rule violation counts.
+
+        ``select=None`` omits ``--select`` so ruff uses the repo's configured
+        rule selection. ``ignore`` forwards as ``--ignore``.
+        """
+        return self._invoke(select, fix=False, unsafe_fixes=unsafe_fixes, ignore=ignore)
+
+    def fix(self, select: str, *, unsafe_fixes: bool = False) -> dict[str, RuleStat]:
+        """Apply fixes for ``select`` and return post-fix remaining stats."""
+        return self._invoke(select, fix=True, unsafe_fixes=unsafe_fixes, ignore=None)
+
+    def format_check(self) -> bool:
+        result = self._run(["format", "--check", *self.targets], allow_violations=True)
+        return result.returncode == 0
+
+    def format(self) -> None:
+        self._run(["format", *self.targets])
+
+    def _invoke(
         self,
         select: str | None,
         *,
-        fix: bool = False,
-        ignore: str | None = None,
+        fix: bool,
+        unsafe_fixes: bool,
+        ignore: str | None,
     ) -> dict[str, RuleStat]:
-        """Run ``ruff check --statistics`` and return per-rule stats.
-
-        ``select=None`` omits ``--select`` so ruff uses the repo's configured
-        rule selection. With ``fix=True``, applies fixes in the same call;
-        the returned stats are the post-fix remaining violations.
-        ``ignore`` forwards to ruff as ``--ignore`` to drop matching rules
-        from the result.
-        """
         args = ["check", "--statistics", "--output-format", "json"]
         args.append("--fix" if fix else "--no-fix")
         if select is not None:
@@ -77,17 +94,10 @@ class Ruff:
             args.extend(["--ignore", ignore])
         # Be explicit either way so a repo's `unsafe-fixes = true` config
         # cannot override our intent.
-        args.append("--unsafe-fixes" if self.unsafe_fixes else "--no-unsafe-fixes")
+        args.append("--unsafe-fixes" if unsafe_fixes else "--no-unsafe-fixes")
         args.extend(self.targets)
         result = self._run(args, allow_violations=True)
         return _parse_stats(result.stdout)
-
-    def format_check(self) -> bool:
-        result = self._run(["format", "--check", *self.targets], allow_violations=True)
-        return result.returncode == 0
-
-    def format(self) -> None:
-        self._run(["format", *self.targets])
 
     def _run(
         self, args: list[str], *, allow_violations: bool = False
@@ -174,20 +184,34 @@ def main(
         print("No Python files to check.")
         return 0
 
-    ruff = Ruff(targets, unsafe_fixes=unsafe_fixes)
+    ruff = Ruff(targets)
 
     try:
         if statistics is not None:
             # Validate up front (cheap call); raises RuffError if selector is bad.
-            ruff.check(_resolve_select(statistics), ignore=ignore)
+            ruff.stats(
+                _resolve_select(statistics),
+                unsafe_fixes=unsafe_fixes,
+                ignore=ignore,
+            )
         if rules is None:
             _print_status(ruff)
             if statistics is not None:
-                _print_statistics(ruff, _resolve_select(statistics), ignore=ignore)
+                _print_statistics(
+                    ruff,
+                    _resolve_select(statistics),
+                    unsafe_fixes=unsafe_fixes,
+                    ignore=ignore,
+                )
             return 0
-        rc = _do_fix_and_commit(repo, ruff, rules)
+        rc = _do_fix_and_commit(repo, ruff, rules, unsafe_fixes=unsafe_fixes)
         if statistics is not None:
-            _print_statistics(ruff, _resolve_select(statistics), ignore=ignore)
+            _print_statistics(
+                ruff,
+                _resolve_select(statistics),
+                unsafe_fixes=unsafe_fixes,
+                ignore=ignore,
+            )
         return rc
     except RuffError as e:
         msg = str(e)
@@ -199,7 +223,7 @@ def main(
 def _print_status(ruff: Ruff) -> None:
     """Status output for the no-rules path: format + induced-rules cleanliness."""
     formatted = ruff.format_check()
-    induced = ruff.check(",".join(RUFF_INDUCED_RULES))
+    induced = ruff.stats(",".join(RUFF_INDUCED_RULES))
     print(f"formatted: {'yes' if formatted else 'no'}")
     if not induced:
         print(f"induced rules ({', '.join(RUFF_INDUCED_RULES)}): clear")
@@ -209,12 +233,14 @@ def _print_status(ruff: Ruff) -> None:
         print(f"  {entry.count}\t{entry.code}\t{entry.name}")
 
 
-def _do_fix_and_commit(repo: git.Repo, ruff: Ruff, rules: str) -> int:
+def _do_fix_and_commit(
+    repo: git.Repo, ruff: Ruff, rules: str, *, unsafe_fixes: bool
+) -> int:
     was_formatted = ruff.format_check()
-    before = ruff.check(rules)
-    before_induced = ruff.check(",".join(RUFF_INDUCED_RULES))
+    before = ruff.stats(rules, unsafe_fixes=unsafe_fixes)
+    before_induced = ruff.stats(",".join(RUFF_INDUCED_RULES))
 
-    after = ruff.check(rules, fix=True)
+    after = ruff.fix(rules, unsafe_fixes=unsafe_fixes)
     fixed: dict[str, int] = {}
     for code, entry in before.items():
         after_entry = after.get(code)
@@ -223,7 +249,7 @@ def _do_fix_and_commit(repo: git.Repo, ruff: Ruff, rules: str) -> int:
             fixed[code] = delta
 
     if not fixed:
-        _report_nothing_fixed(ruff, rules, after)
+        _report_nothing_fixed(ruff, rules, after, unsafe_fixes=unsafe_fixes)
         return 0
 
     # Clean up induced rules either if they were absent before the fix
@@ -236,7 +262,7 @@ def _do_fix_and_commit(repo: git.Repo, ruff: Ruff, rules: str) -> int:
         if code not in before_induced or code in before
     ]
     if silent_codes:
-        ruff.check(",".join(silent_codes), fix=True)
+        ruff.fix(",".join(silent_codes), unsafe_fixes=unsafe_fixes)
 
     if was_formatted:
         ruff.format()
@@ -265,7 +291,9 @@ def _tracked_python_files(repo: git.Repo) -> list[str]:
     ]
 
 
-def _report_nothing_fixed(ruff: Ruff, select: str, after: dict[str, RuleStat]) -> None:
+def _report_nothing_fixed(
+    ruff: Ruff, select: str, after: dict[str, RuleStat], *, unsafe_fixes: bool
+) -> None:
     if not after:
         print("No matching violations.")
         return
@@ -273,9 +301,9 @@ def _report_nothing_fixed(ruff: Ruff, select: str, after: dict[str, RuleStat]) -
     for entry in sorted(after.values(), key=lambda e: (-e.count, e.code)):
         marker = "[*]" if entry.fixable else "[ ]"
         print(f"{entry.count}\t{entry.code}\t{marker} {entry.name}")
-    if ruff.unsafe_fixes:
+    if unsafe_fixes:
         return
-    unsafe_after = Ruff(ruff.targets, unsafe_fixes=True).check(select)
+    unsafe_after = ruff.stats(select, unsafe_fixes=True)
     hidden = sum(e.fixable_count for e in unsafe_after.values())
     if hidden > 0:
         plural = "es" if hidden != 1 else ""
@@ -301,9 +329,13 @@ def _print_remaining(after: dict[str, RuleStat]) -> None:
 
 
 def _print_statistics(
-    ruff: Ruff, select: str | None, *, ignore: str | None = None
+    ruff: Ruff,
+    select: str | None,
+    *,
+    unsafe_fixes: bool = False,
+    ignore: str | None = None,
 ) -> None:
-    stats = ruff.check(select, ignore=ignore)
+    stats = ruff.stats(select, unsafe_fixes=unsafe_fixes, ignore=ignore)
     print()
     if not stats:
         print("remaining: none")
