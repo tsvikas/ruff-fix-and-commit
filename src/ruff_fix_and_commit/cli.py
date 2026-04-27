@@ -31,6 +31,8 @@ class RuffError(Exception):
 
 @dataclass(frozen=True)
 class RuleStat:
+    """One row of ruff's `--statistics` JSON output for a single rule."""
+
     code: str
     name: str
     count: int
@@ -39,6 +41,7 @@ class RuleStat:
 
     @classmethod
     def from_json(cls, payload: dict[str, Any]) -> RuleStat:
+        """Build a RuleStat from one ruff `--statistics` JSON entry."""
         return cls(
             code=payload["code"],
             name=payload["name"],
@@ -94,6 +97,7 @@ class Ruff:
     """Adapter for invoking the ruff CLI against a fixed set of targets."""
 
     def __init__(self, targets: list[Path]) -> None:
+        """Bind the adapter to the file paths ruff should be invoked on."""
         self.targets = targets
 
     def stats(
@@ -124,10 +128,12 @@ class Ruff:
         )
 
     def format_check(self) -> bool:
+        """Return True iff `ruff format --check` reports the targets are formatted."""
         result = self._run(["format", "--check", *self.targets], allow_violations=True)
         return result.returncode == 0
 
     def format(self) -> None:
+        """Apply `ruff format` in place to the targets."""
         self._run(["format", *self.targets])
 
     def _invoke(
@@ -226,6 +232,7 @@ def main(
     ignore:
         Forwarded to ruff as `--ignore` for the post-fix `--statistics`
         run only. Example: `D,ANN`.
+
     """
     try:
         repo = git.Repo(".", search_parent_directories=True)
