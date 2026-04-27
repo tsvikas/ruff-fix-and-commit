@@ -17,6 +17,31 @@ app = cyclopts.App(name="ruff-fix-and-commit")
 _RUFF_ENV = {k: v for k, v in os.environ.items() if k != "RUFF_OUTPUT_FORMAT"}
 
 
+class RuffError(Exception):
+    """ruff exited with an unexpected status (config/usage error, not violations)."""
+
+
+def _run_ruff(
+    args: list[str], *, allow_violations: bool = False
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["ruff", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_RUFF_ENV,
+    )
+    allowed = {0, 1} if allow_violations else {0}
+    if result.returncode not in allowed:
+        msg = (
+            result.stderr.strip()
+            or result.stdout.strip()
+            or f"ruff exited with code {result.returncode}"
+        )
+        raise RuffError(msg)
+    return result
+
+
 @app.default
 def main(rules: str, *, unsafe_fixes: bool = False) -> int:
     """Run `ruff check --fix` for RULES and commit the changes.
@@ -47,17 +72,29 @@ def main(rules: str, *, unsafe_fixes: bool = False) -> int:
         print("Nothing to fix.")
         return 0
 
+    try:
+        return _do_fix_and_commit(repo, rules, targets, unsafe_fixes=unsafe_fixes)
+    except RuffError as e:
+        msg = str(e)
+        prefix = "" if msg.lower().startswith("error") else "error: "
+        print(f"{prefix}{msg}", file=sys.stderr)
+        return 2
+
+
+def _do_fix_and_commit(
+    repo: git.Repo, rules: str, targets: list[str], *, unsafe_fixes: bool
+) -> int:
     was_formatted = _format_check_clean(targets)
     had_i001_pre = bool(_violations("I001", targets))
     had_f401_pre = bool(_violations("F401", targets))
 
     before_counts = Counter(v["code"] for v in _violations(rules, targets))
 
-    fix_cmd = ["ruff", "check", "--select", rules, "--fix"]
+    fix_args = ["check", "--select", rules, "--fix"]
     if unsafe_fixes:
-        fix_cmd.append("--unsafe-fixes")
-    fix_cmd.extend(targets)
-    subprocess.run(fix_cmd, check=False, env=_RUFF_ENV)
+        fix_args.append("--unsafe-fixes")
+    fix_args.extend(targets)
+    _run_ruff(fix_args, allow_violations=True)
 
     after_counts = Counter(v["code"] for v in _violations(rules, targets))
     fixed: dict[str, int] = {}
@@ -76,14 +113,13 @@ def main(rules: str, *, unsafe_fixes: bool = False) -> int:
     if not had_f401_pre:
         silent_codes.append("F401")
     if silent_codes:
-        subprocess.run(
-            ["ruff", "check", "--select", ",".join(silent_codes), "--fix", *targets],
-            check=False,
-            env=_RUFF_ENV,
+        _run_ruff(
+            ["check", "--select", ",".join(silent_codes), "--fix", *targets],
+            allow_violations=True,
         )
 
     if was_formatted:
-        subprocess.run(["ruff", "format", *targets], check=False, env=_RUFF_ENV)
+        _run_ruff(["format", *targets])
 
     repo.git.add(update=True)
     if not repo.is_dirty(working_tree=False, untracked_files=False, index=True):
@@ -108,20 +144,13 @@ def _tracked_python_files(repo: git.Repo) -> list[str]:
 
 
 def _format_check_clean(targets: list[str]) -> bool:
-    result = subprocess.run(
-        ["ruff", "format", "--check", *targets],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_RUFF_ENV,
-    )
+    result = _run_ruff(["format", "--check", *targets], allow_violations=True)
     return result.returncode == 0
 
 
 def _violations(select: str, targets: list[str]) -> list[dict]:
-    result = subprocess.run(
+    result = _run_ruff(
         [
-            "ruff",
             "check",
             "--select",
             select,
@@ -130,10 +159,7 @@ def _violations(select: str, targets: list[str]) -> list[dict]:
             "--no-fix",
             *targets,
         ],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_RUFF_ENV,
+        allow_violations=True,
     )
     if not result.stdout.strip():
         return []
@@ -145,14 +171,9 @@ def _violations(select: str, targets: list[str]) -> list[dict]:
 
 @functools.cache
 def _rule_name(code: str) -> str:
-    result = subprocess.run(
-        ["ruff", "rule", code, "--output-format", "json"],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_RUFF_ENV,
-    )
-    if result.returncode != 0:
+    try:
+        result = _run_ruff(["rule", code, "--output-format", "json"])
+    except RuffError:
         return ""
     try:
         return json.loads(result.stdout).get("name", "")

@@ -163,6 +163,26 @@ def test_no_fixable_violations(repo: git.Repo) -> None:
     assert repo.head.commit.hexsha == initial
 
 
+def test_invalid_selector_returns_error(repo: git.Repo) -> None:
+    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
+    initial = repo.head.commit.hexsha
+    r = run_rfc(repo, "F731")  # F731 is not a valid selector
+    assert r.returncode == 2, r.stderr
+    assert "F731" in r.stderr
+    assert repo.head.commit.hexsha == initial
+
+
+def test_ruff_chatter_silenced(repo: git.Repo) -> None:
+    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n')
+    r = run_rfc(repo, "B009")
+    assert r.returncode == 0, r.stderr
+    # Our user-facing output should be just the commit message; ruff's own
+    # progress chatter should not leak through.
+    for noise in ("Found ", "All checks passed", "files left unchanged"):
+        assert noise not in r.stdout, f"unexpected ruff output: {noise!r}"
+        assert noise not in r.stderr, f"unexpected ruff output: {noise!r}"
+
+
 def test_submodule_files_not_modified(tmp_path: Path) -> None:
     inner = tmp_path / "inner"
     inner.mkdir()
