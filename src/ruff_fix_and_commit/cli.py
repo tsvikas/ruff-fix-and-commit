@@ -243,13 +243,13 @@ def main(
             _print_status(ruff)
             if stats_selector is not None:
                 _print_statistics(
-                    ruff, stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore
+                    ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
                 )
             return 0
         rc = _do_fix_and_commit(repo, ruff, rules, unsafe_fixes=unsafe_fixes)
         if stats_selector is not None:
             _print_statistics(
-                ruff, stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore
+                ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
             )
         return rc
     except RuffError as e:
@@ -367,14 +367,7 @@ def _print_remaining(after: dict[str, RuleStat]) -> None:
         print(f"{remaining} violations remain.")
 
 
-def _print_statistics(
-    ruff: Ruff,
-    selector: Selector | str | None,
-    *,
-    unsafe_fixes: bool = False,
-    ignore: str | None = None,
-) -> None:
-    stats = ruff.stats(selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
+def _print_statistics(stats: dict[str, RuleStat]) -> None:
     print()
     if not stats:
         print("remaining: none")
