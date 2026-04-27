@@ -285,28 +285,26 @@ def main(
 
     stats_selector = Selector.parse(statistics) if statistics is not None else None
     try:
-        if stats_selector is not None:
-            # Validate up front (cheap call); raises RuffError if selector is bad.
+        if stats_selector is not None and select is not None:
+            # Validate the stats selector before running the fix so a typo
+            # there doesn't waste a fix run. Status mode is read-only, so the
+            # one stats call below catches the same error on its own.
             ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
         if select is None:
             _print_status(ruff)
-            if stats_selector is not None:
-                _print_statistics(
-                    ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
-                )
-            return ExitCode.OK
-        rc = _do_fix_and_commit(repo, ruff, select, unsafe_fixes=unsafe_fixes)
+            rc = ExitCode.OK
+        else:
+            rc = _do_fix_and_commit(repo, ruff, select, unsafe_fixes=unsafe_fixes)
         if stats_selector is not None:
             _print_statistics(
                 ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
             )
+        return rc
     except RuffError as e:
         msg = str(e)
         prefix = "" if msg.lower().startswith("error") else "error: "
         print(f"{prefix}{msg}", file=sys.stderr)
         return ExitCode.RUFF_ERROR
-    else:
-        return rc
 
 
 def _print_status(ruff: Ruff) -> None:
