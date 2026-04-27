@@ -134,6 +134,8 @@ no fixes applied:
 hint: 9 hidden fixes can be enabled with --unsafe-fixes
 ```
 
+The marker on each row indicates how many of that rule's violations are auto-fixable: `[*]` all of them, `[~]` some of them, `[ ]` none of them.
+
 ## Exit codes
 
 | Code | Meaning |

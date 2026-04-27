@@ -173,6 +173,18 @@ class Ruff:
         return result
 
 
+def _fixability_marker(entry: RuleStat) -> str:
+    """Render an at-a-glance marker for how many of an entry's violations are fixable.
+
+    [*] all of them, [~] some of them, [ ] none of them.
+    """
+    if entry.fixable_count == 0:
+        return "[ ]"
+    if entry.fixable_count == entry.count:
+        return "[*]"
+    return "[~]"
+
+
 def _parse_stats(stdout: str) -> dict[str, RuleStat]:
     if not stdout.strip():
         return {}
@@ -338,8 +350,7 @@ def _report_nothing_fixed(
         return
     print("no fixes applied:")
     for entry in sorted(after.values(), key=lambda e: (-e.count, e.code)):
-        marker = "[*]" if entry.fixable else "[ ]"
-        print(f"{entry.count}\t{entry.code}\t{marker} {entry.name}")
+        print(f"{entry.count}\t{entry.code}\t{_fixability_marker(entry)} {entry.name}")
     if unsafe_fixes:
         return
     unsafe_after = ruff.stats(select, unsafe_fixes=True)
@@ -375,8 +386,7 @@ def _print_statistics(stats: dict[str, RuleStat]) -> None:
     print("remaining:")
     sorted_entries = sorted(stats.values(), key=lambda s: (-s.count, s.code))
     for s in sorted_entries:
-        marker = "[*]" if s.fixable else "[ ]"
-        print(f"{s.count}\t{s.code}\t{marker} {s.name}")
+        print(f"{s.count}\t{s.code}\t{_fixability_marker(s)} {s.name}")
 
 
 def _build_message(
