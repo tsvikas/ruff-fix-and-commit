@@ -434,10 +434,10 @@ def _build_message(
     items = sorted(fixed.items(), key=lambda kv: (-kv[1], kv[0]))
     if len(items) == 1:
         code, count = items[0]
-        return f"ruff-fix: {code} ({names.get(code, '')}) x{count}"
+        return f"ruff-fix: {code} ({names[code]}) x{count}"
     total = sum(count for _, count in items)
     lines = [f"ruff-fix: {rules_input} x{total}", ""]
-    lines.extend(f"- {code} ({names.get(code, '')}) x{count}" for code, count in items)
+    lines.extend(f"- {code} ({names[code]}) x{count}" for code, count in items)
     return "\n".join(lines)
 
 
