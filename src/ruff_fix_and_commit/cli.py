@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import cyclopts
@@ -155,8 +156,10 @@ class Ruff:
     def _run(
         self, args: list[str], *, allow_violations: bool = False
     ) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run(
-            ["ruff", *args],
+        # We invoke `ruff` from PATH with arguments we construct ourselves;
+        # there is no untrusted input here. S603/S607 are deliberately suppressed.
+        result = subprocess.run(  # noqa: S603
+            ["ruff", *args],  # noqa: S607
             capture_output=True,
             text=True,
             check=False,
@@ -263,12 +266,13 @@ def main(
             _print_statistics(
                 ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
             )
-        return rc
     except RuffError as e:
         msg = str(e)
         prefix = "" if msg.lower().startswith("error") else "error: "
         print(f"{prefix}{msg}", file=sys.stderr)
         return 2
+    else:
+        return rc
 
 
 def _print_status(ruff: Ruff) -> None:
@@ -332,11 +336,11 @@ def _do_fix_and_commit(
 
 def _tracked_python_files(repo: git.Repo) -> list[str]:
     suffixes = (".py", ".pyi", ".ipynb")
-    root = repo.working_dir
+    root = Path(repo.working_dir)
     submodule_prefixes = tuple(f"{sm.path}/" for sm in repo.submodules)
     paths = repo.git.ls_files().splitlines()
     return [
-        os.path.join(root, p)
+        str(root / p)
         for p in paths
         if p.endswith(suffixes) and not p.startswith(submodule_prefixes)
     ]
