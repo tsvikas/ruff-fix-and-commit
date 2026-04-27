@@ -8,7 +8,7 @@ from pathlib import Path
 import git
 import pytest
 
-from ruff_fix_and_commit.cli import app
+from ruff_fix_and_commit.cli import ExitCode, app
 
 # `result_action="return_value"` makes cyclopts hand back the command's int
 # instead of `sys.exit`-ing on us; bind it once so tests just call `run([...])`.
@@ -281,7 +281,7 @@ def test_invalid_statistics_selector_runs_no_fix(
     file_before = (Path(repo.working_dir) / "t.py").read_text()
     rc = run(["B009", "--statistics", "F731"])
     err = capsys.readouterr().err
-    assert rc == 2
+    assert rc == ExitCode.RUFF_ERROR
     assert "F731" in err
     # The fix run is gated on the stats selector being valid.
     assert repo.head.commit.hexsha == initial
@@ -295,7 +295,7 @@ def test_invalid_selector_returns_error(
     initial = repo.head.commit.hexsha
     rc = run(["F731"])  # F731 is not a valid selector
     err = capsys.readouterr().err
-    assert rc == 2
+    assert rc == ExitCode.RUFF_ERROR
     assert "F731" in err
     assert repo.head.commit.hexsha == initial
 

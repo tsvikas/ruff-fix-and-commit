@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from enum import IntEnum
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,15 @@ app = cyclopts.App(name="ruff-fix-and-commit")
 _RUFF_ENV = {k: v for k, v in os.environ.items() if k != "RUFF_OUTPUT_FORMAT"}
 
 _DEFAULT_SENTINEL = "DEFAULT"
+
+
+class ExitCode(IntEnum):
+    """Process exit codes returned by `main`. Documented in README."""
+
+    OK = 0
+    REFUSED = 1
+    RUFF_ERROR = 2
+
 
 # Rules whose violations a ruff fix can introduce as a side effect of fixing
 # something else. We post-fix-clean these so a ruff-fix-and-commit run never
@@ -219,7 +229,7 @@ def main(
     unsafe_fixes: bool = False,
     statistics: str | None = None,
     ignore: str | None = None,
-) -> int:
+) -> ExitCode:
     """Run `ruff check --fix` for RULES and commit the changes.
 
     Parameters
@@ -246,7 +256,7 @@ def main(
         repo = git.Repo(".", search_parent_directories=True)
     except git.InvalidGitRepositoryError:
         print("error: not inside a git repository", file=sys.stderr)
-        return 1
+        return ExitCode.REFUSED
     # Dirty-tree gate only applies when we plan to fix + commit; status
     # mode is read-only and safe to run on a dirty tree.
     if rules is not None and repo.is_dirty(untracked_files=False):
@@ -255,12 +265,12 @@ def main(
             "commit or stash them first",
             file=sys.stderr,
         )
-        return 1
+        return ExitCode.REFUSED
 
     targets = _tracked_python_files(repo)
     if not targets:
         print("No Python files to check.")
-        return 0
+        return ExitCode.OK
 
     ruff = Ruff(targets)
 
@@ -275,7 +285,7 @@ def main(
                 _print_statistics(
                     ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
                 )
-            return 0
+            return ExitCode.OK
         rc = _do_fix_and_commit(repo, ruff, rules, unsafe_fixes=unsafe_fixes)
         if stats_selector is not None:
             _print_statistics(
@@ -285,7 +295,7 @@ def main(
         msg = str(e)
         prefix = "" if msg.lower().startswith("error") else "error: "
         print(f"{prefix}{msg}", file=sys.stderr)
-        return 2
+        return ExitCode.RUFF_ERROR
     else:
         return rc
 
@@ -305,7 +315,7 @@ def _print_status(ruff: Ruff) -> None:
 
 def _do_fix_and_commit(
     repo: git.Repo, ruff: Ruff, rules: str, *, unsafe_fixes: bool
-) -> int:
+) -> ExitCode:
     was_formatted = ruff.format_check()
     before = ruff.stats(rules, unsafe_fixes=unsafe_fixes)
     before_induced = ruff.stats(",".join(RUFF_INDUCED_RULES))
@@ -320,7 +330,7 @@ def _do_fix_and_commit(
 
     if not fixed:
         _report_nothing_fixed(ruff, rules, after, unsafe_fixes=unsafe_fixes)
-        return 0
+        return ExitCode.OK
 
     # Clean up induced rules either if they were absent before the fix
     # (so the fix could have introduced them) or if they were in the user's
@@ -340,13 +350,13 @@ def _do_fix_and_commit(
     repo.git.add(update=True)
     if not repo.is_dirty(working_tree=False, untracked_files=False, index=True):
         print("warning: nothing was staged after running ruff; skipping commit")
-        return 0
+        return ExitCode.OK
     names = {code: entry.name for code, entry in before.items()}
     message = _build_message(rules, fixed, names)
     repo.index.commit(message)
     print(message)
     _print_remaining(after)
-    return 0
+    return ExitCode.OK
 
 
 def _tracked_python_files(repo: git.Repo) -> list[Path]:
