@@ -455,12 +455,18 @@ def _print_remaining_issues_breakdown(
         header = ("code", "name", "safe", "unsafe")
         table = [(c, n, str(s), str(u)) for c, n, s, u, _ in rows]
     widths = [max(len(row[i]) for row in [header, *table]) for i in range(len(header))]
-    for row in [header, *table]:
+
+    def fmt(row: tuple[str, ...]) -> str:
         cells = [
             row[i].ljust(widths[i]) if i < 2 else row[i].rjust(widths[i])
             for i in range(len(header))
         ]
-        print("  " + "  ".join(cells).rstrip())
+        return "  " + "  ".join(cells).rstrip()
+
+    print(fmt(header))
+    print("  " + "─" * (sum(widths) + 2 * (len(widths) - 1)))
+    for row in table:
+        print(fmt(row))
 
 
 def _build_message(
