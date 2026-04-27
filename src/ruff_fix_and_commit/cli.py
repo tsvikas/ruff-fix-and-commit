@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -99,6 +100,11 @@ class Ruff:
     def __init__(self, targets: list[Path]) -> None:
         """Bind the adapter to the file paths ruff should be invoked on."""
         self.targets = targets
+        executable = shutil.which("ruff")
+        if executable is None:
+            msg = "`ruff` not found on PATH"
+            raise RuffError(msg)
+        self._executable = executable
 
     def stats(
         self,
@@ -162,10 +168,12 @@ class Ruff:
     def _run(
         self, args: list[str], *, allow_violations: bool = False
     ) -> subprocess.CompletedProcess[str]:
-        # We invoke `ruff` from PATH with arguments we construct ourselves;
-        # there is no untrusted input here. S603/S607 are deliberately suppressed.
+        # `args` is a list (no shell), and `self._executable` is the
+        # shutil.which-resolved absolute path to ruff. S603 has no
+        # programmatic fix -- it's a "review for untrusted input" rule;
+        # the input here is internal.
         result = subprocess.run(  # noqa: S603
-            ["ruff", *args],  # noqa: S607
+            [self._executable, *args],
             capture_output=True,
             text=True,
             check=False,
