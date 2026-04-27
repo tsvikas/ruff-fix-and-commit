@@ -239,6 +239,7 @@ def main(
     unsafe_fixes: bool = False,
     statistics: str | None = None,
     ignore: str | None = None,
+    show_unfixable: bool = False,
 ) -> ExitCode:
     """Run `ruff check --fix` for `--select` rules under TARGET and commit the changes.
 
@@ -263,6 +264,11 @@ def main(
     ignore:
         Forwarded to ruff as `--ignore` for the post-fix `--statistics`
         run only. Example: `D,ANN`.
+    show_unfixable:
+        In the `--statistics` breakdown, also include rules whose
+        violations have no available fix, and add an `unfixable`
+        column. Off by default — fully-unfixable rules are filtered out
+        and the column is omitted.
 
     """
     try:
@@ -300,8 +306,10 @@ def main(
         else:
             rc = _do_fix_and_commit(repo, ruff, select, unsafe_fixes=unsafe_fixes)
         if stats_selector is not None:
+            safe_stats = ruff.stats(stats_selector, unsafe_fixes=False, ignore=ignore)
+            unsafe_stats = ruff.stats(stats_selector, unsafe_fixes=True, ignore=ignore)
             _print_remaining_issues_breakdown(
-                ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
+                safe_stats, unsafe_stats, show_unfixable=show_unfixable
             )
         return rc
     except RuffError as e:
@@ -417,15 +425,42 @@ def _print_unfixed_count(after: dict[str, RuleStat]) -> None:
         print(f"{remaining} violations remain.")
 
 
-def _print_remaining_issues_breakdown(stats: dict[str, RuleStat]) -> None:
+def _print_remaining_issues_breakdown(
+    safe: dict[str, RuleStat],
+    unsafe: dict[str, RuleStat],
+    *,
+    show_unfixable: bool,
+) -> None:
     print()
-    if not stats:
+    rows: list[tuple[str, str, int, int, int]] = []
+    for code, stat in safe.items():
+        safe_fixes = stat.fixable_count
+        unsafe_entry = unsafe.get(code)
+        unsafe_fixes = (unsafe_entry.fixable_count if unsafe_entry else 0) - safe_fixes
+        unfixable = stat.count - safe_fixes - unsafe_fixes
+        if not show_unfixable and safe_fixes == 0 and unsafe_fixes == 0:
+            continue
+        rows.append((code, stat.name, safe_fixes, unsafe_fixes, unfixable))
+    if not rows:
         print("remaining: none")
         return
+    rows.sort()
     print("remaining:")
-    sorted_entries = sorted(stats.values(), key=lambda s: (-s.count, s.code))
-    for s in sorted_entries:
-        print(f"{s.count}\t{s.code}\t{_fixability_marker(s)} {s.name}")
+    if show_unfixable:
+        header: tuple[str, ...] = ("code", "name", "safe", "unsafe", "unfixable")
+        table: list[tuple[str, ...]] = [
+            (c, n, str(s), str(u), str(uf)) for c, n, s, u, uf in rows
+        ]
+    else:
+        header = ("code", "name", "safe", "unsafe")
+        table = [(c, n, str(s), str(u)) for c, n, s, u, _ in rows]
+    widths = [max(len(row[i]) for row in [header, *table]) for i in range(len(header))]
+    for row in [header, *table]:
+        cells = [
+            row[i].ljust(widths[i]) if i < 2 else row[i].rjust(widths[i])
+            for i in range(len(header))
+        ]
+        print("  " + "  ".join(cells).rstrip())
 
 
 def _build_message(

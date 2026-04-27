@@ -207,15 +207,46 @@ def test_statistics_shows_what_remains(
     add_file(
         repo,
         "t.py",
-        'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n    1\n    2\n',
+        'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n    return dict()\n',
     )
-    assert run(["--select", "B009", "--statistics", "B"]) == 0
+    assert run(["--select", "B009", "--statistics", "B,C"]) == 0
     out = capsys.readouterr().out
     assert "ruff-fix: B009 (get-attr-with-constant) x2" in out
     assert "remaining:" in out
-    # B018 useless-expression isn't auto-fixable, so it should remain.
+    # C408 unnecessary-collection-call has unsafe fixes, so it shows up.
+    stats_section = out.split("remaining:", 1)[1]
+    assert "C408" in stats_section
+
+
+def test_statistics_hides_unfixable_by_default(
+    repo: git.Repo, capsys: pytest.CaptureFixture[str]
+) -> None:
+    add_file(
+        repo,
+        "t.py",
+        'def f():\n    getattr(o, "a")\n    1\n',
+    )
+    # B018 useless-expression has no fix, so it must NOT appear by default.
+    assert run(["--select", "B009", "--statistics", "B"]) == 0
+    out = capsys.readouterr().out
+    stats_section = out.split("remaining:", 1)[1]
+    assert "B018" not in stats_section
+    assert "unfixable" not in stats_section
+
+
+def test_statistics_show_unfixable_includes_them(
+    repo: git.Repo, capsys: pytest.CaptureFixture[str]
+) -> None:
+    add_file(
+        repo,
+        "t.py",
+        'def f():\n    getattr(o, "a")\n    1\n',
+    )
+    assert run(["--select", "B009", "--statistics", "B", "--show-unfixable"]) == 0
+    out = capsys.readouterr().out
     stats_section = out.split("remaining:", 1)[1]
     assert "B018" in stats_section
+    assert "unfixable" in stats_section
 
 
 def test_statistics_when_nothing_left(
@@ -230,13 +261,13 @@ def test_statistics_default_uses_repo_selection(
     repo: git.Repo, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = Path(repo.working_dir)
-    (root / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["B"]\n')
+    (root / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["B", "C"]\n')
     repo.index.add(["pyproject.toml"])
     repo.index.commit("add config")
-    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    1\n')
+    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    return dict()\n')
     assert run(["--select", "B009", "--statistics", "DEFAULT"]) == 0
-    # B009 fixed; B018 (in repo's "B" selection) remains.
-    assert "B018" in capsys.readouterr().out
+    # B009 fixed; C408 (in repo's "B,C" selection) remains with unsafe fixes.
+    assert "C408" in capsys.readouterr().out
 
 
 def test_statistics_ignore_drops_matching_rules(
@@ -245,11 +276,11 @@ def test_statistics_ignore_drops_matching_rules(
     add_file(
         repo,
         "t.py",
-        'def f():\n    getattr(o, "a")\n    1\n',
+        'def f():\n    getattr(o, "a")\n    return dict()\n',
     )
-    # Without --ignore, B018 (useless-expression) would remain.
-    # With --ignore B018, the stats output should show "remaining: none".
-    assert run(["--select", "B009", "--statistics", "B", "--ignore", "B018"]) == 0
+    # Without --ignore, C408 (unnecessary-collection-call) would remain with unsafe
+    # fixes. With --ignore C408, the stats output should show "remaining: none".
+    assert run(["--select", "B009", "--statistics", "B,C", "--ignore", "C408"]) == 0
     assert "remaining: none" in capsys.readouterr().out
 
 
@@ -257,20 +288,20 @@ def test_statistics_default_with_extend(
     repo: git.Repo, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = Path(repo.working_dir)
-    (root / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["B"]\n')
+    (root / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["B", "C"]\n')
     repo.index.add(["pyproject.toml"])
     repo.index.commit("add config")
     add_file(
         repo,
         "t.py",
-        'def f(l):\n    getattr(o, "a")\n    1\n    return l\n',
+        'def f():\n    getattr(o, "a")\n    return dict()\n\n\nf = lambda x: x\n',
     )
     assert run(["--select", "B009", "--statistics", "DEFAULT,E"]) == 0
     out = capsys.readouterr().out
-    # B018 stays from the repo's "B" selection (DEFAULT branch);
-    # E741 (ambiguous variable name `l`) is added via extend.
-    assert "B018" in out
-    assert "E741" in out
+    # C408 (unnecessary-collection-call) stays from the repo's "C" selection
+    # (DEFAULT branch); E731 (lambda-assignment) is added via extend.
+    assert "C408" in out
+    assert "E731" in out
 
 
 def test_invalid_statistics_selector_runs_no_fix(

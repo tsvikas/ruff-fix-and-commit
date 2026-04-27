@@ -20,13 +20,13 @@ Every ruff invocation goes through `Ruff._run` (silenced by default; raises `Ruf
 3. `ruff check --select I001,F401 --statistics --no-fix --output-format json <files>` — `before_induced` (single call covers both induced rules).
 4. `ruff check --select <rules> --fix --statistics --output-format json (--unsafe-fixes|--no-unsafe-fixes) <files>` — applies the fix **and** returns post-fix per-rule counts in one call. The unsafe flag is always passed explicitly so a repo's `unsafe-fixes = true` config cannot override our intent.
 
-Plus, conditionally: silent I001/F401 fix, post-fix `ruff format`, and one extra `ruff.stats(..., unsafe_fixes=True)` only on the no-fix-applied path to compute the "hidden fixes" hint.
+Plus, conditionally: silent I001/F401 fix, post-fix `ruff format`, and one extra `ruff.stats(..., unsafe_fixes=True)` only on the no-fix-applied path to compute the "hidden fixes" hint. When `--statistics` is set, the post-fix breakdown queries ruff twice — once with `--no-unsafe-fixes` and once with `--unsafe-fixes` — so it can split the fixable count into a `safe` and `unsafe` column.
 
 `RUFF_OUTPUT_FORMAT` is stripped from the subprocess env so `ruff format` doesn't print the "unstable in non-preview" warning when the user has it set.
 
 ## CLI shape
 
-`cyclopts` parses the function signature directly. The positional is `TARGET` (path; defaults to `.`); rules go through `--select`. `--statistics SELECTOR` accepts any ruff selector; the literal `DEFAULT` (case-insensitive) omits `--select` so ruff uses the repo's configured rule selection.
+`cyclopts` parses the function signature directly. The positional is `TARGET` (path; defaults to `.`); rules go through `--select`. `--statistics SELECTOR` accepts any ruff selector; the literal `DEFAULT` (case-insensitive) omits `--select` so ruff uses the repo's configured rule selection. `--show-unfixable` opts into showing rules whose violations have no available fix (off by default — those rows are filtered and the `unfixable` column is omitted).
 
 ## Tests
 
@@ -43,7 +43,7 @@ When adding tests, pick rules with stable behavior across ruff versions:
 | C408  | always-unsafe fix                         | `--unsafe-fixes` gating        |
 | E731  | always-unsafe fix                         | hidden-fix hint                |
 | E741  | no fix at all                             | unfixable-no-hint case         |
-| B018  | no fix at all                             | `--statistics` remaining       |
+| B018  | no fix at all                             | `--show-unfixable` gating      |
 | I001  | sort-imports fix                          | silent-fix invariant           |
 
 ## Commit policy
