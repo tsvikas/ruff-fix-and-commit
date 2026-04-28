@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from functools import partial
 from pathlib import Path
 
 import git
 import pytest
 
+from ruff_fix_and_commit import __version__
 from ruff_fix_and_commit.cli import ExitCode, app
 
 # `result_action="return_value"` makes cyclopts hand back the command's int
 # instead of `sys.exit`-ing on us; bind it once so tests just call `run([...])`.
 run = partial(app, result_action="return_value")
+
+
+def test_version(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        app("--version")
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.strip() == __version__
 
 
 def _make_repo(path: Path) -> git.Repo:
@@ -27,13 +36,16 @@ def _make_repo(path: Path) -> git.Repo:
 
 
 @pytest.fixture
-def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> git.Repo:
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[git.Repo]:
     monkeypatch.chdir(tmp_path)
     r = _make_repo(tmp_path)
     (tmp_path / ".gitkeep").write_text("")
     r.index.add([".gitkeep"])
     r.index.commit("init")
-    return r
+    try:
+        yield r
+    finally:
+        r.close()
 
 
 def add_file(repo: git.Repo, name: str, content: str) -> Path:

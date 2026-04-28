@@ -1,0 +1,19 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v0.26.3
+_src_path: https://github.com/tsvikas/python-template
+cli_framework: cyclopts
+format_tool: ruff
+get_package_version_from_vcs: true
+github_user: tsvikas
+in_codecov: true
+in_pypi: false
+in_rtd: false
+jupyter_files: forbid
+license: MIT
+package_description: ruff --fix & git commit.
+package_name: ruff_fix_and_commit
+project_name: ruff-fix-and-commit
+python_min: 14
+user_email: tsvikas@gmail.com
+user_name: Tsvika Shapira
+year: 2026

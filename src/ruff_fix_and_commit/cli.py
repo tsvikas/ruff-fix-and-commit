@@ -1,7 +1,5 @@
 """ruff-fix-and-commit: run `ruff check --fix` for selected rules and commit."""
 
-from __future__ import annotations
-
 import json
 import os
 import shutil
@@ -10,12 +8,16 @@ import sys
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, TypedDict
 
-import cyclopts
 import git
+from cyclopts import App
 
-app = cyclopts.App(name="ruff-fix-and-commit")
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+app = App(name="ruff-fix-and-commit")
+app.register_install_completion_command()
 
 _RUFF_ENV = {k: v for k, v in os.environ.items() if k != "RUFF_OUTPUT_FORMAT"}
 
@@ -45,6 +47,16 @@ class RuffError(Exception):
     """ruff exited with an unexpected status (config/usage error, not violations)."""
 
 
+class _RuleStatJSON(TypedDict):
+    """Shape of one entry in ruff's `--statistics --output-format json` output."""
+
+    code: str
+    name: str
+    count: int
+    fixable: bool
+    fixable_count: int
+
+
 @dataclass(frozen=True)
 class RuleStat:
     """One row of ruff's `--statistics` JSON output for a single rule."""
@@ -56,7 +68,7 @@ class RuleStat:
     fixable_count: int
 
     @classmethod
-    def from_json(cls, payload: dict[str, Any]) -> RuleStat:
+    def from_json(cls, payload: _RuleStatJSON) -> RuleStat:
         """Build a RuleStat from one ruff `--statistics` JSON entry."""
         return cls(
             code=payload["code"],
@@ -165,7 +177,12 @@ class Ruff:
         unsafe_fixes: bool,
         ignore: str | None,
     ) -> dict[str, RuleStat]:
-        args = ["check", "--statistics", "--output-format", "json"]
+        args: list[str | os.PathLike[str]] = [
+            "check",
+            "--statistics",
+            "--output-format",
+            "json",
+        ]
         args.append("--fix" if fix else "--no-fix")
         if selector.select is not None:
             args.extend(["--select", selector.select])
@@ -181,7 +198,10 @@ class Ruff:
         return _parse_stats(result.stdout)
 
     def _run(
-        self, args: list[str], *, allow_violations: bool = False
+        self,
+        args: Sequence[str | os.PathLike[str]],
+        *,
+        allow_violations: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         # `args` is a list (no shell), and `self._executable` is the
         # shutil.which-resolved absolute path to ruff. S603 has no
@@ -231,9 +251,10 @@ def _parse_stats(stdout: str) -> dict[str, RuleStat]:
     return {entry["code"]: RuleStat.from_json(entry) for entry in payload}
 
 
-@app.default
-def main(
+@app.default()
+def main(  # noqa: PLR0913
     target: Path = Path(),
+    /,
     *,
     select: str | None = None,
     unsafe_fixes: bool = False,
@@ -276,45 +297,54 @@ def main(
     except git.InvalidGitRepositoryError:
         print("error: not inside a git repository", file=sys.stderr)
         return ExitCode.REFUSED
-    # Dirty-tree gate only applies when we plan to fix + commit; status
-    # mode is read-only and safe to run on a dirty tree.
-    if select is not None and repo.is_dirty(untracked_files=False):
-        print(
-            "error: working tree has uncommitted changes to tracked files; "
-            "commit or stash them first",
-            file=sys.stderr,
-        )
-        return ExitCode.REFUSED
-
-    targets = _tracked_python_files(repo, target)
-    if not targets:
-        print("No Python files to check.")
-        return ExitCode.OK
-
-    ruff = Ruff(targets)
-
-    stats_selector = Selector.parse(statistics) if statistics is not None else None
     try:
-        if stats_selector is not None and select is not None:
-            # Validate the stats selector before running the fix so a typo
-            # there doesn't waste a fix run. Status mode is read-only, so the
-            # one stats call below catches the same error on its own.
-            ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
-        if select is None:
-            _print_status(ruff)
-            rc = ExitCode.OK
-        else:
-            rc = _do_fix_and_commit(repo, ruff, select, unsafe_fixes=unsafe_fixes)
-        if stats_selector is not None:
-            safe_stats = ruff.stats(stats_selector, unsafe_fixes=False, ignore=ignore)
-            unsafe_stats = ruff.stats(stats_selector, unsafe_fixes=True, ignore=ignore)
-            _print_remaining_issues_breakdown(
-                safe_stats, unsafe_stats, show_unfixable=show_unfixable
+        # Dirty-tree gate only applies when we plan to fix + commit; status
+        # mode is read-only and safe to run on a dirty tree.
+        if select is not None and repo.is_dirty(untracked_files=False):
+            print(
+                "error: working tree has uncommitted changes to tracked files; "
+                "commit or stash them first",
+                file=sys.stderr,
             )
-        return rc
-    except RuffError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return ExitCode.RUFF_ERROR
+            return ExitCode.REFUSED
+
+        targets = _tracked_python_files(repo, target)
+        if not targets:
+            print("No Python files to check.")
+            return ExitCode.OK
+
+        ruff = Ruff(targets)
+
+        stats_selector = Selector.parse(statistics) if statistics is not None else None
+        try:
+            if stats_selector is not None and select is not None:
+                # Validate the stats selector before running the fix so a typo
+                # there doesn't waste a fix run. Status mode is read-only, so the
+                # one stats call below catches the same error on its own.
+                ruff.stats(stats_selector, unsafe_fixes=unsafe_fixes, ignore=ignore)
+            if select is None:
+                _print_status(ruff)
+                rc = ExitCode.OK
+            else:
+                rc = _do_fix_and_commit(repo, ruff, select, unsafe_fixes=unsafe_fixes)
+            if stats_selector is not None:
+                safe_stats = ruff.stats(
+                    stats_selector, unsafe_fixes=False, ignore=ignore
+                )
+                unsafe_stats = ruff.stats(
+                    stats_selector, unsafe_fixes=True, ignore=ignore
+                )
+                _print_remaining_issues_breakdown(
+                    safe_stats, unsafe_stats, show_unfixable=show_unfixable
+                )
+        except RuffError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return ExitCode.RUFF_ERROR
+        else:
+            return rc
+    finally:
+        # Close gitpython's git-cmd subprocess pool so it doesn't leak.
+        repo.close()
 
 
 def _print_status(ruff: Ruff) -> None:
@@ -455,10 +485,12 @@ def _print_remaining_issues_breakdown(
         header = ("code", "name", "safe", "unsafe")
         table = [(c, n, str(s), str(u)) for c, n, s, u, _ in rows]
     widths = [max(len(row[i]) for row in [header, *table]) for i in range(len(header))]
+    # First N columns are name-like (left-aligned); the rest are counts (right-aligned).
+    name_columns = 2
 
     def fmt(row: tuple[str, ...]) -> str:
         cells = [
-            row[i].ljust(widths[i]) if i < 2 else row[i].rjust(widths[i])
+            row[i].ljust(widths[i]) if i < name_columns else row[i].rjust(widths[i])
             for i in range(len(header))
         ]
         return "  " + "  ".join(cells).rstrip()
@@ -480,7 +512,3 @@ def _build_message(
     lines = [f"ruff-fix: {rules_input} x{total}", ""]
     lines.extend(f"- {code} ({names[code]}) x{count}" for code, count in items)
     return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    app()

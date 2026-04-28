@@ -1,8 +1,72 @@
+# based on https://www.toptal.com/developers/gitignore/api/pythonvanilla
+# and https://github.com/github/gitignore/blob/main/Python.gitignore
+
+### PythonVanilla ###
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-.ruff_cache/
-.pytest_cache/
-dist/
+*.py[codz]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Unit test / coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py.cover
+.hypothesis/
+.pytest_cache/
+cover/
+.benchmarks/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments / Secrets
+.env
+.envrc
+.venv
+
+# mkdocs documentation
+/site
+/docs/reference
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff stuff:
+.ruff_cache/
+
+# version file
+_version.py
+
+# jupyter notebooks
+
+# specific to this project:

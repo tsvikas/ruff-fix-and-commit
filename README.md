@@ -1,11 +1,24 @@
 # ruff-fix-and-commit
 
+[![Tests][tests-badge]][tests-link]
+[![uv][uv-badge]][uv-link]
+[![Ruff][ruff-badge]][ruff-link]
+[![codecov][codecov-badge]][codecov-link]
+\
+[![Made Using tsvikas/python-template][template-badge]][template-link]
+[![GitHub Discussion][github-discussions-badge]][github-discussions-link]
+[![PRs Welcome][prs-welcome-badge]][prs-welcome-link]
+
+## Overview
+
 Run `ruff check --fix` for selected rule(s) and produce a single git commit with a per-rule summary.
 
 ## Install
 
+Install this tool using pipx (or uv):
+
 ```bash
-uv tool install git+https://github.com/tsvikas/ruff-fix-and-commit
+pipx install git+https://github.com/tsvikas/ruff-fix-and-commit.git
 ```
 
 Or, from a checkout:
@@ -25,6 +38,8 @@ ruff-fix-and-commit [TARGET] [--select RULES] [--unsafe-fixes] [--statistics SEL
 `--select RULES` is a comma-separated ruff rule selector (codes or category prefixes), passed verbatim to `ruff --select`. If omitted, the tool runs in **status mode** (see below) instead of fixing.
 
 The `--statistics` value accepts the same syntax plus a `DEFAULT` token: bare `DEFAULT` means "use the repo's configured selection", and `DEFAULT,X` means "the repo's configuration plus X" (translated to `--extend-select X`).
+
+Use `ruff-fix-and-commit --help` to learn more.
 
 ### Examples
 
@@ -149,12 +164,22 @@ The marker on each row indicates how many of that rule's violations are auto-fix
 | `1`  | Refused (not in a repo, dirty tracked files) |
 | `2`  | ruff failed (invalid selector, etc.) |
 
-## Development
+## Contributing
 
-```bash
-uv sync --group dev
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
-pre-commit run --all-files
-```
+Interested in contributing?
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guideline.
+
+[codecov-badge]: https://codecov.io/gh/tsvikas/ruff-fix-and-commit/graph/badge.svg
+[codecov-link]: https://codecov.io/gh/tsvikas/ruff-fix-and-commit
+[github-discussions-badge]: https://img.shields.io/static/v1?label=Discussions&message=Ask&color=blue&logo=github
+[github-discussions-link]: https://github.com/tsvikas/ruff-fix-and-commit/discussions
+[prs-welcome-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg
+[prs-welcome-link]: https://opensource.guide/how-to-contribute/
+[ruff-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+[ruff-link]: https://github.com/astral-sh/ruff
+[template-badge]: https://img.shields.io/badge/%F0%9F%9A%80_Made_Using-tsvikas%2Fpython--template-gold
+[template-link]: https://github.com/tsvikas/python-template
+[tests-badge]: https://github.com/tsvikas/ruff-fix-and-commit/actions/workflows/ci.yml/badge.svg
+[tests-link]: https://github.com/tsvikas/ruff-fix-and-commit/actions/workflows/ci.yml
+[uv-badge]: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json
+[uv-link]: https://github.com/astral-sh/uv
