@@ -30,7 +30,7 @@ uv tool install .
 ## Usage
 
 ```bash
-ruff-fix-and-commit [TARGET] [--select RULES] [--unsafe-fixes] [--statistics SELECTOR] [--ignore SELECTOR]
+ruff-fix-and-commit [TARGET] [--select RULES] [--unsafe-fixes] [--statistics SELECTOR] [--ignore RULES]
 ```
 
 `TARGET` is a path that scopes the run to tracked Python files under it. Defaults to the current directory.
