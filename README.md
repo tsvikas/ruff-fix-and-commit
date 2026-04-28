@@ -71,23 +71,23 @@ ruff-fix-and-commit
 Single rule fixed:
 
 ```
-ruff-fix: B009 (get-attr-with-constant) x2
+lint: fix B009 (get-attr-with-constant) x2
 
-Generated with ruff: https://docs.astral.sh/ruff/
-Using ruff-fix-and-commit: https://github.com/tsvikas/ruff-fix-and-commit
+Auto-fixed with ruff: https://docs.astral.sh/ruff/
+Committed by ruff-fix-and-commit: https://github.com/tsvikas/ruff-fix-and-commit
 ```
 
 Multiple rules fixed (header shows the rules input verbatim and the total fix count):
 
 ```
-ruff-fix: A,B001,C212 x20
+lint: fix A,B001,C212 x20
 
 - A123 (builtin-attribute-shadowing) x10
 - B001 (mutable-default-value) x7
 - C212 (unnecessary-iterable-comprehension) x3
 
-Generated with ruff: https://docs.astral.sh/ruff/
-Using ruff-fix-and-commit: https://github.com/tsvikas/ruff-fix-and-commit
+Auto-fixed with ruff: https://docs.astral.sh/ruff/
+Committed by ruff-fix-and-commit: https://github.com/tsvikas/ruff-fix-and-commit
 ```
 
 ## Guarantees

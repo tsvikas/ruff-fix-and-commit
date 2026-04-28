@@ -60,7 +60,7 @@ def test_single_rule(repo: git.Repo) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n')
     assert run(["--select", "B009"]) == 0
     assert repo.head.commit.message.strip() == (
-        f"ruff-fix: B009 (get-attr-with-constant) x2\n\n{COMMIT_TRAILER}"
+        f"lint: fix B009 (get-attr-with-constant) x2\n\n{COMMIT_TRAILER}"
     )
 
 
@@ -78,7 +78,7 @@ def test_multi_rule_body_sorted_by_count(repo: git.Repo) -> None:
     )
     assert run(["--select", "B009,UP008"]) == 0
     assert repo.head.commit.message.strip() == (
-        "ruff-fix: B009,UP008 x5\n"
+        "lint: fix B009,UP008 x5\n"
         "\n"
         "- B009 (get-attr-with-constant) x3\n"
         "- UP008 (super-call-with-parameters) x2\n"
@@ -95,7 +95,7 @@ def test_unsafe_fixes_gating(repo: git.Repo) -> None:
     assert run(["--select", "C408", "--unsafe-fixes"]) == 0
     assert repo.head.commit.hexsha != initial
     assert repo.head.commit.message.strip() == (
-        f"ruff-fix: C408 (unnecessary-collection-call) x1\n\n{COMMIT_TRAILER}"
+        f"lint: fix C408 (unnecessary-collection-call) x1\n\n{COMMIT_TRAILER}"
     )
 
 
@@ -128,7 +128,7 @@ def test_preexisting_i001_fixed_and_credited_when_selected(repo: git.Repo) -> No
     )
     assert run(["--select", "I001"]) == 0
     assert repo.head.commit.message.strip() == (
-        f"ruff-fix: I001 (unsorted-imports) x1\n\n{COMMIT_TRAILER}"
+        f"lint: fix I001 (unsorted-imports) x1\n\n{COMMIT_TRAILER}"
     )
     assert p.read_text().startswith("import os\nimport sys\n")
 
@@ -178,7 +178,7 @@ def test_partial_fix_reports_remaining(
     assert run(["--select", "B009,E731"]) == 0
     out = capsys.readouterr().out
     # B009 was fixable (safe); E731 is unsafe-only and stays.
-    assert "ruff-fix: B009 (get-attr-with-constant) x2" in out
+    assert "lint: fix B009 (get-attr-with-constant) x2" in out
     assert "2 violations remain" in out
 
 
@@ -226,7 +226,7 @@ def test_statistics_shows_what_remains(
     )
     assert run(["--select", "B009", "--statistics", "B,C"]) == 0
     out = capsys.readouterr().out
-    assert "ruff-fix: B009 (get-attr-with-constant) x2" in out
+    assert "lint: fix B009 (get-attr-with-constant) x2" in out
     assert "remaining:" in out
     # C408 unnecessary-collection-call has unsafe fixes, so it shows up.
     stats_section = out.split("remaining:", 1)[1]

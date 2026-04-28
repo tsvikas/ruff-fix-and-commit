@@ -531,8 +531,8 @@ def _print_remaining_issues_breakdown(
 
 
 COMMIT_TRAILER = (
-    "Generated with ruff: https://docs.astral.sh/ruff/\n"
-    "Using ruff-fix-and-commit: https://github.com/tsvikas/ruff-fix-and-commit"
+    "Auto-fixed with ruff: https://docs.astral.sh/ruff/\n"
+    "Committed by ruff-fix-and-commit: https://github.com/tsvikas/ruff-fix-and-commit"
 )
 
 
@@ -542,10 +542,10 @@ def _build_message(
     items = sorted(fixed.items(), key=lambda kv: (-kv[1], kv[0]))
     if len(items) == 1:
         code, count = items[0]
-        subject = f"ruff-fix: {code} ({names[code]}) x{count}"
+        subject = f"lint: fix {code} ({names[code]}) x{count}"
         return f"{subject}\n\n{COMMIT_TRAILER}"
     total = sum(count for _, count in items)
-    lines = [f"ruff-fix: {rules_input} x{total}", ""]
+    lines = [f"lint: fix {rules_input} x{total}", ""]
     lines.extend(f"- {code} ({names[code]}) x{count}" for code, count in items)
     lines.extend(["", COMMIT_TRAILER])
     return "\n".join(lines)
