@@ -403,6 +403,25 @@ def test_status_mode_with_statistics(
     assert repo.head.commit.hexsha == initial
 
 
+def test_status_mode_defaults_to_statistics_default(
+    repo: git.Repo, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = Path(repo.working_dir)
+    (root / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["B"]\n')
+    repo.index.add(["pyproject.toml"])
+    repo.index.commit("add config")
+    add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n')
+    initial = repo.head.commit.hexsha
+    # Bare command with no flags should imply --statistics DEFAULT,
+    # picking up the repo's configured `select = ["B"]`.
+    assert run([]) == 0
+    out = capsys.readouterr().out
+    assert "formatted:" in out
+    assert "remaining:" in out
+    assert "B009" in out
+    assert repo.head.commit.hexsha == initial
+
+
 def test_status_mode_runs_on_dirty_tree(
     repo: git.Repo, capsys: pytest.CaptureFixture[str]
 ) -> None:

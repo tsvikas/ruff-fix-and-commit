@@ -302,8 +302,10 @@ def main(  # noqa: PLR0913
         Comma-separated ruff rule selectors (codes or category prefixes),
         passed verbatim to `ruff --select`. Example: `A,B001,C212`. If
         omitted, the tool runs in status mode: it reports whether the
-        repo is formatted and whether the induced rules (I001, F401)
-        are clear, without fixing or committing.
+        repo is formatted, whether the induced rules (I001, F401) are
+        clear, and the per-rule breakdown of what's currently violating
+        under the repo's configured rule selection. Status mode never
+        fixes and never commits.
     unsafe_fixes:
         Forwarded to ruff as `--unsafe-fixes`.
     statistics:
@@ -311,6 +313,8 @@ def main(  # noqa: PLR0913
         and print a per-rule count of what's still left. Pass `DEFAULT`
         to omit `--select` and use the repo's configured rule selection.
         Validated up front so a typo here doesn't waste a fix run.
+        Defaults to `DEFAULT` in status mode (no `--select`); explicit
+        `--statistics X` always overrides.
     ignore:
         Forwarded to ruff as `--ignore` for the post-fix `--statistics`
         run only. Example: `D,ANN`.
@@ -344,6 +348,11 @@ def main(  # noqa: PLR0913
 
         ruff = Ruff(targets)
 
+        # Status mode (no --select) defaults to --statistics DEFAULT so the
+        # bare command shows the full lint backlog under the repo's
+        # configured selection. An explicit --statistics overrides this.
+        if select is None and statistics is None:
+            statistics = _DEFAULT_SENTINEL
         stats_selector = Selector.parse(statistics) if statistics is not None else None
         try:
             if stats_selector is not None and select is not None:

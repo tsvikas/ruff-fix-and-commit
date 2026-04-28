@@ -62,7 +62,8 @@ ruff-fix-and-commit --select B009 --statistics DEFAULT,E
 # after fixing B009, show stats for any selector, suppressing noisy families
 ruff-fix-and-commit --select B009 --statistics ALL --ignore D,ANN
 
-# status mode: report whether the tree is formatted and induced rules are clear
+# status mode: format check, induced-rule cleanliness, and a remaining-issues
+# breakdown under the repo's configured selection (implicit --statistics DEFAULT)
 ruff-fix-and-commit
 ```
 
@@ -119,23 +120,26 @@ After the silent cleanup, if the tree was already formatted before the fix, `ruf
 
 ## Status mode
 
-When invoked **without** `--select`, the tool reports:
+When invoked **without** `--select`, the tool reports the format-check state, induced-rule cleanliness, and a remaining-issues breakdown under the repo's configured rule selection (status mode implies `--statistics DEFAULT`):
 
 ```
 formatted: yes
 I001 unsorted-imports: clean
 F401 unused-import: clean
+remaining: none
 ```
 
-Each induced rule shows either `clean` or its current violation count:
+Each induced rule shows either `clean` or its current violation count, and the breakdown lists every rule that's currently violating:
 
 ```
 formatted: no
 I001 unsorted-imports: 3
 F401 unused-import: 1
+remaining:
+  ...per-rule table...
 ```
 
-Status mode never fixes and never commits. If `--statistics` is passed, the stats block runs after the status report.
+Status mode never fixes and never commits. Pass `--statistics RULES` to override the implicit `DEFAULT` and scope the breakdown to a specific selector.
 
 ## Output cases
 

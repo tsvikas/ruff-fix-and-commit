@@ -26,7 +26,7 @@ Plus, conditionally: silent I001/F401 fix, post-fix `ruff format`, and one extra
 
 ## CLI shape
 
-`cyclopts` parses the function signature directly. The positional is `TARGET` (path; defaults to `.`); rules go through `--select`. `--statistics SELECTOR` accepts any ruff selector; the literal `DEFAULT` (case-insensitive) omits `--select` so ruff uses the repo's configured rule selection. `--show-unfixable` opts into showing rules whose violations have no available fix (off by default — those rows are filtered and the `unfixable` column is omitted).
+`cyclopts` parses the function signature directly. The positional is `TARGET` (path; defaults to `.`); rules go through `--select`. `--statistics SELECTOR` accepts any ruff selector; the literal `DEFAULT` (case-insensitive) omits `--select` so ruff uses the repo's configured rule selection. In status mode (no `--select`), `--statistics` defaults to `DEFAULT` so the bare command shows the full lint backlog; an explicit `--statistics X` overrides. `--show-unfixable` opts into showing rules whose violations have no available fix (off by default — those rows are filtered and the `unfixable` column is omitted).
 
 ## Tests
 
