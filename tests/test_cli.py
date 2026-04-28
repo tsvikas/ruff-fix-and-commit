@@ -10,7 +10,7 @@ import git
 import pytest
 
 from ruff_fix_and_commit import __version__
-from ruff_fix_and_commit.cli import ExitCode, app
+from ruff_fix_and_commit.cli import COMMIT_TRAILER, ExitCode, app
 
 # `result_action="return_value"` makes cyclopts hand back the command's int
 # instead of `sys.exit`-ing on us; bind it once so tests just call `run([...])`.
@@ -59,8 +59,8 @@ def add_file(repo: git.Repo, name: str, content: str) -> Path:
 def test_single_rule(repo: git.Repo) -> None:
     add_file(repo, "t.py", 'def f():\n    getattr(o, "a")\n    getattr(o, "b")\n')
     assert run(["--select", "B009"]) == 0
-    assert (
-        repo.head.commit.message.strip() == "ruff-fix: B009 (get-attr-with-constant) x2"
+    assert repo.head.commit.message.strip() == (
+        f"ruff-fix: B009 (get-attr-with-constant) x2\n\n{COMMIT_TRAILER}"
     )
 
 
@@ -81,7 +81,9 @@ def test_multi_rule_body_sorted_by_count(repo: git.Repo) -> None:
         "ruff-fix: B009,UP008 x5\n"
         "\n"
         "- B009 (get-attr-with-constant) x3\n"
-        "- UP008 (super-call-with-parameters) x2"
+        "- UP008 (super-call-with-parameters) x2\n"
+        "\n"
+        f"{COMMIT_TRAILER}"
     )
 
 
@@ -92,9 +94,8 @@ def test_unsafe_fixes_gating(repo: git.Repo) -> None:
     assert repo.head.commit.hexsha == initial
     assert run(["--select", "C408", "--unsafe-fixes"]) == 0
     assert repo.head.commit.hexsha != initial
-    assert (
-        repo.head.commit.message.strip()
-        == "ruff-fix: C408 (unnecessary-collection-call) x1"
+    assert repo.head.commit.message.strip() == (
+        f"ruff-fix: C408 (unnecessary-collection-call) x1\n\n{COMMIT_TRAILER}"
     )
 
 
@@ -126,7 +127,9 @@ def test_preexisting_i001_fixed_and_credited_when_selected(repo: git.Repo) -> No
         "import sys\nimport os\n\ndef f():\n    return sys.path, os.getcwd()\n",
     )
     assert run(["--select", "I001"]) == 0
-    assert repo.head.commit.message.strip() == "ruff-fix: I001 (unsorted-imports) x1"
+    assert repo.head.commit.message.strip() == (
+        f"ruff-fix: I001 (unsorted-imports) x1\n\n{COMMIT_TRAILER}"
+    )
     assert p.read_text().startswith("import os\nimport sys\n")
 
 
