@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v0.26.3
+_commit: v0.26.4
 _src_path: https://github.com/tsvikas/python-template
 cli_framework: cyclopts
 format_tool: ruff
