@@ -7,18 +7,18 @@ Notes for Claude when working on this project.
 The four guarantees that all behavior tests exercise:
 
 1. **Refuse on dirty tracked tree.** `repo.is_dirty(untracked_files=False)` — untracked files are explicitly ignored so they don't block a run, and never make it into the commit either.
-2. **Operate only on tracked Python files under TARGET.** `_tracked_python_files(repo, target)` returns absolute paths from `git ls-files`, filtered to `.py` / `.pyi` / `.ipynb`, with submodule mount points excluded and restricted to files under the `target` argument (defaults to cwd). Passing the file list explicitly to ruff (instead of `.`) means untracked files and submodule contents are never even read.
-3. **Format invariant.** If `ruff format --check` was clean before the fix, run `ruff format` after. If it wasn't, don't reformat — the tool never *introduces* formatting.
-4. **Silent I001/F401 cleanup.** If pre-state had **zero** I001 or F401 violations and the user's fix introduced some, fix them silently. If pre-state already had them, leave them alone — they belong to whatever the user is doing in another commit.
+1. **Operate only on tracked Python files under TARGET.** `_tracked_python_files(repo, target)` returns absolute paths from `git ls-files`, filtered to `.py` / `.pyi` / `.ipynb`, with submodule mount points excluded and restricted to files under the `target` argument (defaults to cwd). Passing the file list explicitly to ruff (instead of `.`) means untracked files and submodule contents are never even read.
+1. **Format invariant.** If `ruff format --check` was clean before the fix, run `ruff format` after. If it wasn't, don't reformat — the tool never *introduces* formatting.
+1. **Silent I001/F401 cleanup.** If pre-state had **zero** I001 or F401 violations and the user's fix introduced some, fix them silently. If pre-state already had them, leave them alone — they belong to whatever the user is doing in another commit.
 
 ## Ruff plumbing
 
 Every ruff invocation goes through `Ruff._run` (silenced by default; raises `RuffError` on non-{0,1} exit codes for stats/fix calls). Four calls on the happy path:
 
 1. `ruff format --check <files>` — pre-state format check.
-2. `ruff check --select <rules> --statistics --no-fix --output-format json <files>` — `before` counts and rule names.
-3. `ruff check --select I001,F401 --statistics --no-fix --output-format json <files>` — `before_induced` (single call covers both induced rules).
-4. `ruff check --select <rules> --fix --statistics --output-format json (--unsafe-fixes|--no-unsafe-fixes) <files>` — applies the fix **and** returns post-fix per-rule counts in one call. The unsafe flag is always passed explicitly so a repo's `unsafe-fixes = true` config cannot override our intent.
+1. `ruff check --select <rules> --statistics --no-fix --output-format json <files>` — `before` counts and rule names.
+1. `ruff check --select I001,F401 --statistics --no-fix --output-format json <files>` — `before_induced` (single call covers both induced rules).
+1. `ruff check --select <rules> --fix --statistics --output-format json (--unsafe-fixes|--no-unsafe-fixes) <files>` — applies the fix **and** returns post-fix per-rule counts in one call. The unsafe flag is always passed explicitly so a repo's `unsafe-fixes = true` config cannot override our intent.
 
 Plus, conditionally: silent I001/F401 fix, post-fix `ruff format`, and one extra `ruff.stats(..., unsafe_fixes=True)` only on the no-fix-applied path to compute the "hidden fixes" hint. When `--statistics` is set, the post-fix breakdown queries ruff twice — once with `--no-unsafe-fixes` and once with `--unsafe-fixes` — so it can split the fixable count into a `safe` and `unsafe` column.
 
@@ -36,15 +36,15 @@ Each test repo is initialized via `_make_repo()` which sets local `user.name`/`e
 
 When adding tests, pick rules with stable behavior across ruff versions:
 
-| Rule  | Property                                  | Used for                       |
-|-------|-------------------------------------------|--------------------------------|
-| B009  | always-safe fix                           | happy path, single/multi rule  |
-| UP008 | always-safe fix                           | multi-rule body sorting        |
-| C408  | always-unsafe fix                         | `--unsafe-fixes` gating        |
-| E731  | always-unsafe fix                         | hidden-fix hint                |
-| E741  | no fix at all                             | unfixable-no-hint case         |
-| B018  | no fix at all                             | `--show-unfixable` gating      |
-| I001  | sort-imports fix                          | silent-fix invariant           |
+| Rule  | Property          | Used for                      |
+| ----- | ----------------- | ----------------------------- |
+| B009  | always-safe fix   | happy path, single/multi rule |
+| UP008 | always-safe fix   | multi-rule body sorting       |
+| C408  | always-unsafe fix | `--unsafe-fixes` gating       |
+| E731  | always-unsafe fix | hidden-fix hint               |
+| E741  | no fix at all     | unfixable-no-hint case        |
+| B018  | no fix at all     | `--show-unfixable` gating     |
+| I001  | sort-imports fix  | silent-fix invariant          |
 
 ## Commit policy
 

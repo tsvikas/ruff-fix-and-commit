@@ -135,13 +135,13 @@ Status mode never fixes and never commits. If `--statistics` is passed, the stat
 
 The tool's output is intentionally minimal. The exact stdout depends on the outcome:
 
-| Outcome | Output |
-|---|---|
-| Repo has no tracked Python files (under `TARGET`) | `No Python files to check.` |
-| Files exist, no violations of `--select` rules | `No matching violations.` |
-| Files exist, violations exist but none fixed | `no fixes applied:` + per-rule counts; `hint: N hidden fixes can be enabled with --unsafe-fixes` if applicable |
-| Some violations fixed, others remain | Commit message + `N violations remain.` (or `1 violation remains.`) footer |
-| All violations fixed | Commit message only |
+| Outcome                                           | Output                                                                                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Repo has no tracked Python files (under `TARGET`) | `No Python files to check.`                                                                                    |
+| Files exist, no violations of `--select` rules    | `No matching violations.`                                                                                      |
+| Files exist, violations exist but none fixed      | `no fixes applied:` + per-rule counts; `hint: N hidden fixes can be enabled with --unsafe-fixes` if applicable |
+| Some violations fixed, others remain              | Commit message + `N violations remain.` (or `1 violation remains.`) footer                                     |
+| All violations fixed                              | Commit message only                                                                                            |
 
 Add `--statistics SELECTOR` for a per-rule breakdown of what's left after the fix; combine with `--ignore D,ANN` to drop noisy families from that view.
 
@@ -158,11 +158,11 @@ The marker on each row indicates how many of that rule's violations are auto-fix
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0`  | Success, or nothing to fix |
+| Code | Meaning                                      |
+| ---- | -------------------------------------------- |
+| `0`  | Success, or nothing to fix                   |
 | `1`  | Refused (not in a repo, dirty tracked files) |
-| `2`  | ruff failed (invalid selector, etc.) |
+| `2`  | ruff failed (invalid selector, etc.)         |
 
 ## Contributing
 
