@@ -13,7 +13,7 @@ The four guarantees that all behavior tests exercise:
 
 ## Ruff plumbing
 
-Every ruff invocation goes through `Ruff._run` (silenced by default; raises `RuffError` on non-{0,1} exit codes for stats/fix calls). Four calls on the happy path:
+Every ruff invocation funnels through `Ruff._subprocess` (silenced by default; raises `RuffError` outside the allowed exit codes — `{0,1}` when `allow_violations=True`, `{0}` otherwise). Two thin builders sit on top: `_run_check` accepts kwargs (`select`, `extend_select`, `ignore`, `fix`, `unsafe_fixes`, `statistics`, `output_format`) and `_run_format` takes only `check`. Selector kwargs accept `str | list[str] | None` and pass through `_csv()`. Four calls on the happy path:
 
 1. `ruff format --check <files>` — pre-state format check.
 1. `ruff check --select <rules> --statistics --no-fix --output-format json <files>` — `before` counts and rule names.

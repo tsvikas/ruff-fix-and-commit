@@ -145,63 +145,84 @@ class Ruff:
         ``selector=None`` omits selectors so ruff uses the repo's
         configured rule selection. ``ignore`` forwards as ``--ignore``.
         """
-        return self._invoke(
-            _to_selector(selector),
-            fix=False,
-            unsafe_fixes=unsafe_fixes,
+        sel = _to_selector(selector)
+        result = self._run_check(
+            select=sel.select,
+            extend_select=sel.extend_select,
             ignore=ignore,
+            unsafe_fixes=unsafe_fixes,
+            statistics=True,
+            output_format="json",
         )
+        return _parse_stats(result.stdout)
 
     def fix(
         self, selector: Selector | str, *, unsafe_fixes: bool = False
     ) -> dict[str, RuleStat]:
         """Apply fixes for ``selector`` and return post-fix remaining stats."""
-        return self._invoke(
-            _to_selector(selector), fix=True, unsafe_fixes=unsafe_fixes, ignore=None
+        sel = _to_selector(selector)
+        result = self._run_check(
+            select=sel.select,
+            extend_select=sel.extend_select,
+            fix=True,
+            unsafe_fixes=unsafe_fixes,
+            statistics=True,
+            output_format="json",
         )
+        return _parse_stats(result.stdout)
 
     def format_check(self) -> bool:
         """Return True iff `ruff format --check` reports the targets are formatted."""
-        result = self._run(["format", "--check", *self.targets], allow_violations=True)
-        return result.returncode == 0
+        return self._run_format(check=True).returncode == 0
 
     def format(self) -> None:
         """Apply `ruff format` in place to the targets."""
-        self._run(["format", *self.targets])
+        self._run_format()
 
-    def _invoke(
+    def _run_check(  # noqa: PLR0913
         self,
-        selector: Selector,
         *,
-        fix: bool,
-        unsafe_fixes: bool,
-        ignore: str | None,
-    ) -> dict[str, RuleStat]:
-        args: list[str | os.PathLike[str]] = [
-            "check",
-            "--statistics",
-            "--output-format",
-            "json",
-        ]
+        select: str | list[str] | None = None,
+        extend_select: str | list[str] | None = None,
+        ignore: str | list[str] | None = None,
+        fix: bool = False,
+        unsafe_fixes: bool = False,
+        statistics: bool = False,
+        output_format: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        args: list[str | os.PathLike[str]] = ["check"]
+        if statistics:
+            args.append("--statistics")
+        if output_format is not None:
+            args.extend(["--output-format", output_format])
         args.append("--fix" if fix else "--no-fix")
-        if selector.select is not None:
-            args.extend(["--select", selector.select])
-        if selector.extend_select is not None:
-            args.extend(["--extend-select", selector.extend_select])
-        if ignore is not None:
-            args.extend(["--ignore", ignore])
         # Be explicit either way so a repo's `unsafe-fixes = true` config
         # cannot override our intent.
         args.append("--unsafe-fixes" if unsafe_fixes else "--no-unsafe-fixes")
+        if (s := _csv(select)) is not None:
+            args.extend(["--select", s])
+        if (s := _csv(extend_select)) is not None:
+            args.extend(["--extend-select", s])
+        if (s := _csv(ignore)) is not None:
+            args.extend(["--ignore", s])
         args.extend(self.targets)
-        result = self._run(args, allow_violations=True)
-        return _parse_stats(result.stdout)
+        # Exit 1 from `ruff check` just means "found violations".
+        return self._subprocess(args, allow_violations=True)
 
-    def _run(
+    def _run_format(self, *, check: bool = False) -> subprocess.CompletedProcess[str]:
+        args: list[str | os.PathLike[str]] = ["format"]
+        if check:
+            args.append("--check")
+        args.extend(self.targets)
+        # `format --check` returns 1 when files would be reformatted; the
+        # in-place form should only succeed.
+        return self._subprocess(args, allow_violations=check)
+
+    def _subprocess(
         self,
         args: Sequence[str | os.PathLike[str]],
         *,
-        allow_violations: bool = False,
+        allow_violations: bool,
     ) -> subprocess.CompletedProcess[str]:
         # `args` is a list (no shell), and `self._executable` is the
         # shutil.which-resolved absolute path to ruff. S603 has no
@@ -227,6 +248,14 @@ class Ruff:
                 msg = msg[len("error:") :].lstrip()
             raise RuffError(msg)
         return result
+
+
+def _csv(value: str | list[str] | None) -> str | None:
+    """Normalize a selector kwarg to ruff's csv format. Empty -> None (omit)."""
+    if value is None:
+        return None
+    joined = value if isinstance(value, str) else ",".join(value)
+    return joined or None
 
 
 def _fixability_marker(entry: RuleStat) -> str:
