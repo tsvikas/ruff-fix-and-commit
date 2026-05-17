@@ -30,10 +30,10 @@ uv tool install .
 ## Usage
 
 ```bash
-ruff-fix-and-commit [TARGET] [--select RULES] [--unsafe-fixes] [--statistics SELECTOR] [--ignore RULES]
+ruff-fix-and-commit [TARGET...] [--select RULES] [--unsafe-fixes] [--statistics SELECTOR] [--ignore RULES]
 ```
 
-`TARGET` is a path that scopes the run to tracked Python files under it. Defaults to the current directory.
+`TARGET` is a path that scopes the run to tracked Python files under it; pass more than one to scope to a union of paths. Defaults to the current directory.
 
 `--select RULES` is a comma-separated ruff rule selector (codes or category prefixes), passed verbatim to `ruff --select`. If omitted, the tool runs in **status mode** (see below) instead of fixing.
 
@@ -47,8 +47,9 @@ Use `ruff-fix-and-commit --help` to learn more.
 # fix all auto-fixable B-rules and the specific C212
 ruff-fix-and-commit --select B,C212
 
-# scope the fix to a subdirectory
+# scope the fix to a subdirectory (or several)
 ruff-fix-and-commit src/ --select A001
+ruff-fix-and-commit src/ tests/ --select A001
 
 # include unsafe fixes (e.g. for E731 lambda-assignment)
 ruff-fix-and-commit --select E731 --unsafe-fixes

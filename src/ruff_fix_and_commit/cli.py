@@ -281,23 +281,22 @@ def _parse_stats(stdout: str) -> dict[str, RuleStat]:
 
 
 @app.default()
-def main(  # noqa: PLR0913
-    target: Path = Path(),
-    /,
-    *,
+def main(
+    *targets: Path,
     select: str | None = None,
     unsafe_fixes: bool = False,
     statistics: str | None = None,
     ignore: str | None = None,
     show_unfixable: bool = False,
 ) -> ExitCode:
-    """Run `ruff check --fix` for `--select` rules under TARGET and commit the changes.
+    """Run `ruff check --fix` for `--select` rules under TARGET(s) and commit.
 
     Parameters
     ----------
-    target:
-        Path to restrict the run to. Only tracked Python files under
-        this path are passed to ruff. Defaults to the current directory.
+    targets:
+        One or more paths to restrict the run to. Only tracked Python
+        files under any of these paths are passed to ruff. Defaults to
+        the current directory when none are given.
     select:
         Comma-separated ruff rule selectors (codes or category prefixes),
         passed verbatim to `ruff --select`. Example: `A,B001,C212`. If
@@ -341,12 +340,13 @@ def main(  # noqa: PLR0913
             )
             return ExitCode.REFUSED
 
-        targets = _tracked_python_files(repo, target)
-        if not targets:
+        target_paths = list(targets) if targets else [Path()]
+        tracked = _tracked_python_files(repo, target_paths)
+        if not tracked:
             print("No Python files to check.")
             return ExitCode.OK
 
-        ruff = Ruff(targets)
+        ruff = Ruff(tracked)
 
         # Status mode (no --select) defaults to --statistics DEFAULT so the
         # bare command shows the full lint backlog under the repo's
@@ -442,18 +442,18 @@ def _do_fix_and_commit(
     return ExitCode.OK
 
 
-def _tracked_python_files(repo: git.Repo, target: Path) -> list[Path]:
+def _tracked_python_files(repo: git.Repo, targets: list[Path]) -> list[Path]:
     suffixes = (".py", ".pyi", ".ipynb")
     root = Path(repo.working_dir)
     submodule_prefixes = tuple(f"{sm.path}/" for sm in repo.submodules)
     paths = repo.git.ls_files().splitlines()
-    target_abs = target.resolve()
+    target_abs = [t.resolve() for t in targets]
     return [
         root / p
         for p in paths
         if p.endswith(suffixes)
         and not p.startswith(submodule_prefixes)
-        and (root / p).is_relative_to(target_abs)
+        and any((root / p).is_relative_to(t) for t in target_abs)
     ]
 
 

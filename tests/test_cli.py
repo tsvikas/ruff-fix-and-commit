@@ -447,6 +447,23 @@ def test_target_restricts_to_subdirectory(repo: git.Repo) -> None:
     assert "other/b.py" not in diff
 
 
+def test_multiple_targets_scope_union(repo: git.Repo) -> None:
+    root = Path(repo.working_dir)
+    (root / "src").mkdir()
+    (root / "tests").mkdir()
+    (root / "other").mkdir()
+    add_file(repo, "src/a.py", 'def f():\n    getattr(o, "a")\n')
+    add_file(repo, "tests/b.py", 'def g():\n    getattr(o, "b")\n')
+    add_file(repo, "other/c.py", 'def h():\n    getattr(o, "c")\n')
+    other_before = (root / "other" / "c.py").read_text()
+    assert run(["src/", "tests/", "--select", "B009"]) == 0
+    assert (root / "other" / "c.py").read_text() == other_before
+    diff = repo.git.show("--stat", "HEAD")
+    assert "src/a.py" in diff
+    assert "tests/b.py" in diff
+    assert "other/c.py" not in diff
+
+
 def test_submodule_files_not_modified(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
