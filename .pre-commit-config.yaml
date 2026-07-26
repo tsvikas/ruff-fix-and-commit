@@ -141,17 +141,6 @@ repos:
       - id: doc8
 
   # Python files
-  - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: 26.3.1
-    hooks:
-      # used to keep the blacken-docs in sync
-      - id: black
-        stages: [manual]
-  - repo: https://github.com/adamchainz/blacken-docs
-    rev: 1.20.0
-    hooks:
-      - id: blacken-docs
-        additional_dependencies: [black==26.3.1]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.12
     hooks:
@@ -160,9 +149,10 @@ repos:
         name: ruff isort
         args: [--select, I001, --fix]
       - id: ruff-format
+        types_or: [python, pyi, jupyter, markdown]
       - id: ruff-check
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.20.2
+    rev: v2.2.0
     hooks:
       - id: mypy
         name: mypy (without imports)
@@ -205,7 +195,7 @@ repos:
     rev: v1.7.12
     hooks:
       - id: actionlint
-  - repo: https://github.com/woodruffw/zizmor-pre-commit
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
     rev: v1.24.1
     hooks:
       - id: zizmor

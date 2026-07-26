@@ -60,8 +60,7 @@ ruff-fix-and-commit = "ruff_fix_and_commit.cli:app"
 dev = [
   ## used in the justfile
   "rust-just ~=1.0",
-  "pre-commit ~=4.0",
-  "black ~=26.1",
+  "prek ~=0.4.0",
   "ruff ~=0.15.0",
   ## can be used for debug
   "icecream >=2",
@@ -95,15 +94,18 @@ docs = [
   "mkdocs-section-index ~=0.3.0",
 ]
 typing = [
-  "mypy[native-parser] ~=1.20.0",
+  "mypy ~=2.2.0",
   "ty ~=0.0",
   # add "*-stubs" and "types-*" packages here (">=0")
 ]
 
 
 [tool.uv]
-required-version = ">=0.7.3"
+required-version = ">=0.10.12"
 default-groups = ["dev", "test", "typing"]
+# Minimum age guard: only consider package versions released at least 24h ago,
+# as a lightweight supply-chain defense against just-published malicious releases.
+exclude-newer = "24 hours"
 
 
 [tool.hatch]
@@ -167,10 +169,9 @@ mypy_path = "stubs"
 fixed_format_cache = true
 # set the platform
 python_version = "3.14"
-# enable checks [last updated: mypy 1.20]
+# enable checks [last updated: mypy 2.2]
 strict = true
 strict_equality_for_none = true
-local_partial_types = true
 disallow_any_unimported = true
 warn_unreachable = true
 disallow_any_explicit = true
@@ -199,8 +200,15 @@ DEP002 = [
 ]
 
 
+[tool.ruff]
+# discover Markdown files so `ruff format` can format their code blocks
+extend-include = ["*.md"]
+
+
 [tool.ruff.format]
 docstring-code-format = true
+# enable preview mode to format code blocks inside Markdown files
+preview = true
 
 
 [tool.ruff.lint]
