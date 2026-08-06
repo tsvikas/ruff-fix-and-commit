@@ -1188,7 +1188,7 @@ typing = [
 [package.metadata]
 requires-dist = [
     { name = "cyclopts", specifier = ">=4" },
-    { name = "gitpython", specifier = ">=3.1.57" },
+    { name = "gitpython", specifier = ">=3.1" },
     { name = "ruff", specifier = ">=0.5" },
 ]
 
