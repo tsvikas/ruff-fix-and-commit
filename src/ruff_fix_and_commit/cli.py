@@ -5,10 +5,12 @@ import os
 import shutil
 import subprocess
 import sys
+import traceback
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, NoReturn, TypedDict
 
 import git
 from cyclopts import App
@@ -25,7 +27,7 @@ _DEFAULT_SENTINEL = "DEFAULT"
 
 
 class ExitCode(IntEnum):
-    """Process exit codes returned by `main`. Documented in README."""
+    """Process exit codes returned by `fix_and_commit`. Documented in README."""
 
     OK = 0
     REFUSED = 1
@@ -281,7 +283,7 @@ def _parse_stats(stdout: str) -> dict[str, RuleStat]:
 
 
 @app.default()
-def main(
+def fix_and_commit(
     *targets: Path,
     select: str | None = None,
     unsafe_fixes: bool = False,
@@ -558,3 +560,49 @@ def _build_message(
     lines.extend(f"- {code} ({names[code]}) x{count}" for code, count in items)
     lines.extend(["", COMMIT_TRAILER])
     return "\n".join(lines)
+
+
+# --- Entry point ----------------------------------------------------------------------
+# Maps the commands above onto exit codes, and is what `[project.scripts]` and
+# `__main__` both call.
+
+# Cyclopts itself exits 2 on invalid usage. These are sysexits(3) codes.
+# `os.EX_*` holds the same values but only exists on Unix, so they are inlined
+# to keep the CLI importable on Windows.
+EX_NOINPUT = 66
+EX_UNAVAILABLE = 69
+EX_SOFTWARE = 70
+EX_NOPERM = 77
+
+
+def _fail(exc: Exception, code: int) -> NoReturn:
+    """Report `exc` on stderr and exit with `code`."""
+    print(f"error: {exc}", file=sys.stderr)
+    sys.exit(code)
+
+
+def main(tokens: Sequence[str] | None = None) -> None:
+    """Run the CLI, reporting failures and mapping them onto exit codes.
+
+    Args:
+        tokens: The command line to parse. Defaults to `sys.argv[1:]`.
+    """
+    try:
+        # `tokens` is a parameter so that tests can pass a command line here.
+        # Under pytest, a bare `app()` warns, since it would parse pytest's own
+        # argv, and a test that does so passes while testing nothing.
+        app(tokens)
+    # Nothing reports the errors below, so without `_fail` the CLI would exit on
+    # a bare code and no output. Match on the exception rather than on
+    # `type(exc)`, so that subclasses such as ConnectionRefusedError still land
+    # on the right code. Specific OSError subclasses must precede any bare
+    # `except OSError`, which would otherwise swallow them.
+    except FileNotFoundError as exc:
+        _fail(exc, EX_NOINPUT)
+    except PermissionError as exc:
+        _fail(exc, EX_NOPERM)
+    except ConnectionError as exc:
+        _fail(exc, EX_UNAVAILABLE)
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        sys.exit(EX_SOFTWARE)

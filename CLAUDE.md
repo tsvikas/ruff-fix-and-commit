@@ -26,7 +26,7 @@ Plus, conditionally: silent I001/F401 fix, post-fix `ruff format`, and one extra
 
 ## CLI shape
 
-`cyclopts` parses the function signature directly. The variadic positional is `*targets: Path` (one or more paths; defaults to `[cwd]` when none given); rules go through `--select`. `--statistics SELECTOR` accepts any ruff selector; the literal `DEFAULT` (case-insensitive) omits `--select` so ruff uses the repo's configured rule selection. In status mode (no `--select`), `--statistics` defaults to `DEFAULT` so the bare command shows the full lint backlog; an explicit `--statistics X` overrides. `--show-unfixable` opts into showing rules whose violations have no available fix (off by default — those rows are filtered and the `unfixable` column is omitted).
+`cyclopts` parses the function signature directly. The command is `fix_and_commit` (`@app.default`); `main()` is the template's entry-point wrapper (`[project.scripts]` and `__main__`) that maps uncaught exceptions onto sysexits codes (66/69/70/77) — command exit codes live in `ExitCode` and must stay below 64. The variadic positional is `*targets: Path` (one or more paths; defaults to `[cwd]` when none given); rules go through `--select`. `--statistics SELECTOR` accepts any ruff selector; the literal `DEFAULT` (case-insensitive) omits `--select` so ruff uses the repo's configured rule selection. In status mode (no `--select`), `--statistics` defaults to `DEFAULT` so the bare command shows the full lint backlog; an explicit `--statistics X` overrides. `--show-unfixable` opts into showing rules whose violations have no available fix (off by default — those rows are filtered and the `unfixable` column is omitted).
 
 ## Tests
 

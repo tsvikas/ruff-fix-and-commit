@@ -175,6 +175,10 @@ The marker on each row indicates how many of that rule's violations are auto-fix
 | `1`  | Refused (not in a repo, dirty tracked files) |
 | `2`  | Invalid usage (bad CLI arguments)            |
 | `3`  | ruff failed (invalid selector, etc.)         |
+| `66` | A file was not found                         |
+| `69` | A service was unavailable                    |
+| `70` | Internal error (with a traceback)            |
+| `77` | Permission denied                            |
 
 ## Contributing
 

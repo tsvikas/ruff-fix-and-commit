@@ -50,7 +50,7 @@ dependencies = [
 # optional_name = ["some_package >=1.0"]
 
 [project.scripts]
-ruff-fix-and-commit = "ruff_fix_and_commit.cli:app"
+ruff-fix-and-commit = "ruff_fix_and_commit.cli:main"
 
 [project.gui-scripts]
 # ruff-fix-and-commit = "ruff_fix_and_commit.gui:app.run"
