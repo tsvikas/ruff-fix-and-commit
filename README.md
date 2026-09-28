@@ -15,10 +15,10 @@ Run `ruff check --fix` for selected rule(s) and produce a single git commit with
 
 ## Install
 
-Install this tool using pipx (or uv):
+Install this tool using uv (or pipx):
 
 ```bash
-pipx install git+https://github.com/tsvikas/ruff-fix-and-commit.git
+uv tool install git+https://github.com/tsvikas/ruff-fix-and-commit.git
 ```
 
 Or, from a checkout:
@@ -178,7 +178,7 @@ The marker on each row indicates how many of that rule's violations are auto-fix
 ## Contributing
 
 Interested in contributing?
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guideline.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 [codecov-badge]: https://codecov.io/gh/tsvikas/ruff-fix-and-commit/graph/badge.svg
 [codecov-link]: https://codecov.io/gh/tsvikas/ruff-fix-and-commit
