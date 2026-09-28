@@ -173,7 +173,8 @@ The marker on each row indicates how many of that rule's violations are auto-fix
 | ---- | -------------------------------------------- |
 | `0`  | Success, or nothing to fix                   |
 | `1`  | Refused (not in a repo, dirty tracked files) |
-| `2`  | ruff failed (invalid selector, etc.)         |
+| `2`  | Invalid usage (bad CLI arguments)            |
+| `3`  | ruff failed (invalid selector, etc.)         |
 
 ## Contributing
 

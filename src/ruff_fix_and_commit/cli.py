@@ -29,7 +29,7 @@ class ExitCode(IntEnum):
 
     OK = 0
     REFUSED = 1
-    RUFF_ERROR = 2
+    RUFF_ERROR = 3
 
 
 # Rules whose violations a ruff fix can introduce as a side effect of fixing
