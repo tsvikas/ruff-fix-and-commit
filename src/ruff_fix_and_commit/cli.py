@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import sys
 import traceback
-from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
